@@ -1,80 +1,82 @@
 #include "TerrainRenderer.h"
+#include "MaterialColors.h"
 #include "../core/Types.h"
 
-// Per-cell deterministic brightness variation — breaks up the flat look.
-// Returns base color with ±range brightness applied using a hash of cell coords.
-static Color vary_color(Color base, int cx, int cy, int range = 14) {
-    unsigned int h = (unsigned int)(cx * 2654435761u ^ cy * 2246822519u);
-    int v = (int)(h & 0x1F) - 16; // -16..+15
-    v = v * range / 16;
-    auto clamp8 = [](int x) -> unsigned char {
-        return (unsigned char)(x < 0 ? 0 : x > 255 ? 255 : x);
-    };
-    return { clamp8((int)base.r + v),
-             clamp8((int)base.g + v),
-             clamp8((int)base.b + v),
-             base.a };
-}
-
 // ── public ─────────────────────────────────────────────────────────────────
+
+void TerrainRenderer::bake_dirty_chunks(TerrainFacade& terrain) {
+    // Iterate all chunks — bake any that are dirty.
+    // With only 32 chunks total this is fast even when all are dirty at startup.
+    for (int cy = 0; cy < terrain.chunks_y(); cy++)
+        for (int cx = 0; cx < terrain.chunks_x(); cx++) {
+            TerrainChunk& chunk = terrain.get_chunk(cx, cy);
+            if (chunk.dirty_visual)
+                bake_chunk(chunk, terrain);
+        }
+}
 
 void TerrainRenderer::draw(const TerrainFacade& terrain,
                             Vector2 camera_offset,
                             int screen_w, int screen_h) const
 {
-    int cell_x0 = (int)(camera_offset.x / CELL_SIZE);
-    int cell_y0 = (int)(camera_offset.y / CELL_SIZE);
-    int cell_x1 = (int)((camera_offset.x + screen_w)  / CELL_SIZE) + 1;
-    int cell_y1 = (int)((camera_offset.y + screen_h) / CELL_SIZE) + 1;
+    // Visible chunk range
+    int cx0 = (int)(camera_offset.x / CHUNK_PX);
+    int cy0 = (int)(camera_offset.y / CHUNK_PX);
+    int cx1 = (int)((camera_offset.x + screen_w)  / CHUNK_PX) + 1;
+    int cy1 = (int)((camera_offset.y + screen_h) / CHUNK_PX) + 1;
 
-    cell_x0 = cell_x0 < 0 ? 0 : cell_x0;
-    cell_y0 = cell_y0 < 0 ? 0 : cell_y0;
-    cell_x1 = cell_x1 > terrain.cells_w() ? terrain.cells_w() : cell_x1;
-    cell_y1 = cell_y1 > terrain.cells_h() ? terrain.cells_h() : cell_y1;
+    cx0 = cx0 < 0 ? 0 : cx0;
+    cy0 = cy0 < 0 ? 0 : cy0;
+    cx1 = cx1 > terrain.chunks_x() ? terrain.chunks_x() : cx1;
+    cy1 = cy1 > terrain.chunks_y() ? terrain.chunks_y() : cy1;
 
-    for (int cy = cell_y0; cy < cell_y1; ++cy) {
-        for (int cx = cell_x0; cx < cell_x1; ++cx) {
-            MaterialID mat = terrain.get_material_unsafe(cx, cy);
-            if (mat == MaterialID::EMPTY || mat == MaterialID::AIR) continue;
+    for (int cy = cy0; cy < cy1; cy++) {
+        for (int cx = cx0; cx < cx1; cx++) {
+            const TerrainChunk& chunk = terrain.get_chunk(cx, cy);
+            if (!chunk.tex_valid) continue;
 
-            int sx = (int)(cx * CELL_SIZE - camera_offset.x);
-            int sy = (int)(cy * CELL_SIZE - camera_offset.y);
+            float sx = (float)(cx * CHUNK_PX) - camera_offset.x;
+            float sy = (float)(cy * CHUNK_PX) - camera_offset.y;
 
-            Color col = cell_color(terrain, mat, cx, cy);
-            DrawRectangle(sx, sy, CELL_SIZE, CELL_SIZE, col);
-
-            // Water: draw a lighter horizontal "shimmer" line at the top pixel row
-            if (mat == MaterialID::WATER) {
-                DrawRectangle(sx, sy, CELL_SIZE, 1, {120, 180, 230, 180});
-            }
+            // src: CHUNK_CELLS × CHUNK_CELLS texels (one per cell)
+            // dst: CHUNK_PX × CHUNK_PX screen pixels  (CELL_SIZE scale = 4×)
+            // No Y-flip needed — Texture2D (not RenderTexture2D) is top-down.
+            Rectangle src  = { 0.0f, 0.0f, (float)CHUNK_CELLS, (float)CHUNK_CELLS };
+            Rectangle dest = { sx,   sy,   (float)CHUNK_PX,    (float)CHUNK_PX    };
+            DrawTexturePro(chunk.tex, src, dest, {0.0f, 0.0f}, 0.0f, WHITE);
         }
     }
 }
 
 // ── private ────────────────────────────────────────────────────────────────
 
-Color TerrainRenderer::cell_color(const TerrainFacade& terrain,
-                                   MaterialID mat, int cx, int cy) const
+void TerrainRenderer::bake_chunk(TerrainChunk& chunk,
+                                  const TerrainFacade& terrain) const
 {
-    Color base;
-    switch (mat) {
-        case MaterialID::DIRT:
-            // Warm brown — gets slightly darker with depth via cy hash
-            base = {125, 82, 48, 255};
-            break;
-        case MaterialID::ROCK:
-            base = {92, 90, 102, 255};
-            break;
-        case MaterialID::GOLD_ORE:
-            // Bright, saturated gold — high visibility
-            base = {235, 195, 30, 255};
-            break;
-        case MaterialID::WATER:
-            base = {55, 115, 195, 210};
-            break;
-        default:
-            return MAGENTA;
+    // Build a CHUNK_CELLS × CHUNK_CELLS CPU image (1 px = 1 cell)
+    Image img = GenImageColor(CHUNK_CELLS, CHUNK_CELLS, {0, 0, 0, 0});
+
+    int base_cx = chunk.chunk_x * CHUNK_CELLS;
+    int base_cy = chunk.chunk_y * CHUNK_CELLS;
+
+    for (int ly = 0; ly < CHUNK_CELLS; ly++) {
+        for (int lx = 0; lx < CHUNK_CELLS; lx++) {
+            int gcx = base_cx + lx;
+            int gcy = base_cy + ly;
+
+            MaterialID mat = terrain.get_material(gcx, gcy);
+            if (mat == MaterialID::EMPTY || mat == MaterialID::AIR) continue;
+
+            ImageDrawPixel(&img, lx, ly, material_cell_color(mat, gcx, gcy));
+        }
     }
 
-    return vary_color(base, cx, cy, 14);
+    // Upload to GPU
+    if (chunk.tex_valid) UnloadTexture(chunk.tex);
+    chunk.tex = LoadTextureFromImage(img);
+    SetTextureFilter(chunk.tex, TEXTURE_FILTER_POINT); // sharp pixels, no blur
+    chunk.tex_valid    = true;
+    chunk.dirty_visual = false;
+
+    UnloadImage(img);
 }

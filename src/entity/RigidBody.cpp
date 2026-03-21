@@ -33,50 +33,68 @@ void RigidBody::update(float dt, const TerrainFacade& terrain) {
 void RigidBody::resolve_x(const TerrainFacade& terrain) {
     if (velocity.x == 0.0f) return;
 
-    // Shrink the Y range slightly so the feet/head don't catch on single cells
-    // when walking horizontally over a 1-cell step.
-    float top    = position.y + 2.0f;
-    float bottom = position.y + size.y - 2.0f;
+    // Returns how many pixels the body penetrates a wall in the move direction.
+    // Uses current position.y so the step-up loop can call it repeatedly.
+    auto x_penetration = [&]() -> float {
+        float top    = position.y + 2.0f;
+        float bottom = position.y + size.y - 2.0f;
+        int cy0 = (int)top    / CELL_SIZE;
+        int cy1 = (int)bottom / CELL_SIZE;
 
-    int cy0 = (int)top    / CELL_SIZE;
-    int cy1 = (int)bottom / CELL_SIZE;
-
-    if (velocity.x > 0.0f) {
-        // Moving right — check right column
-        int cx = (int)(position.x + size.x - 0.01f) / CELL_SIZE;
-        for (int cy = cy0; cy <= cy1; cy++) {
-            if (!cell_solid(terrain, cx, cy)) continue;
-            float wall = (float)(cx * CELL_SIZE);
-            float pen  = position.x + size.x - wall;
-            if (pen > 0.0f) {
-                position.x -= pen;
-                velocity.x  = 0.0f;
-                return;
+        if (velocity.x > 0.0f) {
+            int cx = (int)(position.x + size.x - 0.01f) / CELL_SIZE;
+            for (int cy = cy0; cy <= cy1; cy++) {
+                if (!cell_solid(terrain, cx, cy)) continue;
+                float pen = position.x + size.x - (float)(cx * CELL_SIZE);
+                if (pen > 0.0f) return pen;
+            }
+        } else {
+            int cx = (int)position.x / CELL_SIZE;
+            for (int cy = cy0; cy <= cy1; cy++) {
+                if (!cell_solid(terrain, cx, cy)) continue;
+                float pen = (float)((cx + 1) * CELL_SIZE) - position.x;
+                if (pen > 0.0f) return pen;
             }
         }
-    } else {
-        // Moving left — check left column
-        int cx = (int)(position.x) / CELL_SIZE;
-        for (int cy = cy0; cy <= cy1; cy++) {
-            if (!cell_solid(terrain, cx, cy)) continue;
-            float wall = (float)((cx + 1) * CELL_SIZE);
-            float pen  = wall - position.x;
-            if (pen > 0.0f) {
-                position.x += pen;
-                velocity.x  = 0.0f;
-                return;
-            }
+        return 0.0f;
+    };
+
+    // True when solid ground exists directly below the body (allows step-up).
+    auto has_ground = [&]() -> bool {
+        int cy  = (int)(position.y + size.y + 1.0f) / CELL_SIZE;
+        int cx0 = (int)(position.x + 1.0f)          / CELL_SIZE;
+        int cx1 = (int)(position.x + size.x - 1.0f) / CELL_SIZE;
+        for (int cx = cx0; cx <= cx1; cx++)
+            if (cell_solid(terrain, cx, cy)) return true;
+        return false;
+    };
+
+    float pen = x_penetration();
+
+    if (pen > 0.0f && has_ground()) {
+        // Slope / ledge climb: try lifting the body 1 px at a time.
+        // Allows walking up terrain slopes and mounting 1–2 cell steps.
+        static constexpr int STEP_MAX = CELL_SIZE * 2; // 8 px = 2 cells
+        float orig_y = position.y;
+        for (int s = 1; s <= STEP_MAX; s++) {
+            position.y = orig_y - (float)s;
+            if (x_penetration() <= 0.0f)
+                return; // climbed — leave new Y in place, don't block X
         }
+        position.y = orig_y; // step-up failed, restore
+    }
+
+    // Push out and zero horizontal velocity
+    if (pen > 0.0f) {
+        if (velocity.x > 0.0f) position.x -= pen;
+        else                    position.x += pen;
+        velocity.x = 0.0f;
     }
 
     // Map boundary clamp
-    if (position.x < 0.0f) {
-        position.x = 0.0f; velocity.x = 0.0f;
-    }
+    if (position.x < 0.0f) { position.x = 0.0f; velocity.x = 0.0f; }
     float max_x = (float)(terrain.cells_w() * CELL_SIZE) - size.x;
-    if (position.x > max_x) {
-        position.x = max_x; velocity.x = 0.0f;
-    }
+    if (position.x > max_x) { position.x = max_x; velocity.x = 0.0f; }
 }
 
 void RigidBody::resolve_y(const TerrainFacade& terrain) {

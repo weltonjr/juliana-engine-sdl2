@@ -100,34 +100,7 @@ void terrain_generate(TerrainFacade& terrain) {
         }
     }
 
-    // ── Pass 5: Water pockets ────────────────────────────────────────────
-
-    auto place_blob = [&](int bx, int by, int radius, MaterialID ore) {
-        int r2 = radius * radius;
-        for (int dy = -radius; dy <= radius; dy++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                if (dx*dx + dy*dy > r2) continue;
-                int nx = bx + dx, ny = by + dy;
-                if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                MaterialID m = terrain.get_material(nx, ny);
-                if (m == MaterialID::DIRT || m == MaterialID::ROCK)
-                    terrain.set_material(nx, ny, ore);
-            }
-        }
-    };
-
-    for (int i = 0; i < 4; i++) {
-        float fx = (hash2(i * 31 + 11, 7) * 0.5f + 0.5f);
-        int bx = (int)(fx * (w - 1));
-        bx = bx < 0 ? 0 : (bx >= w ? w-1 : bx);
-
-        int surf = surface_map[bx], rock = rock_map[bx];
-        int by = surf + (int)((rock - surf) * 0.55f) + i * 8;
-        by = by < 0 ? 0 : (by >= h ? h-1 : by);
-
-        int radius = 4 + (int)((hash2(i + 50, 3) * 0.5f + 0.5f) * 5.0f);
-        place_blob(bx, by, radius, MaterialID::WATER);
-    }
+    // Water: deferred to v0.2 fluid system
 
     // ── Mark all chunks dirty ────────────────────────────────────────────
 

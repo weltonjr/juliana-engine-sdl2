@@ -11,6 +11,14 @@ Game::Game(int screen_w, int screen_h)
     terrain_generate(m_terrain);
 }
 
+Game::~Game() {
+    for (int cy = 0; cy < m_terrain.chunks_y(); cy++)
+        for (int cx = 0; cx < m_terrain.chunks_x(); cx++) {
+            auto& chunk = m_terrain.get_chunk(cx, cy);
+            if (chunk.tex_valid) UnloadTexture(chunk.tex);
+        }
+}
+
 void Game::update(float dt) {
     // Toggle debug overlay
     if (IsKeyPressed(KEY_F1)) m_debug.toggle();
@@ -33,6 +41,9 @@ void Game::update(float dt) {
     } else {
         update_free_camera(dt);
     }
+
+    // Rebuild GPU textures for any dirty chunks (runs after dig/explode mutations)
+    m_terrain_renderer.bake_dirty_chunks(m_terrain);
 }
 
 void Game::update_free_camera(float dt) {

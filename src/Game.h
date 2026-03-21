@@ -10,6 +10,7 @@
 class Game {
 public:
     Game(int screen_w, int screen_h);
+    ~Game(); // unloads chunk GPU textures
 
     void update(float dt);
     void draw() const;
