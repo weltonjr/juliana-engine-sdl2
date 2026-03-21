@@ -5,7 +5,7 @@
 
 // ── spawn position: center of map, just above the surface (~15% from top) ──
 static constexpr float SPAWN_X = MAP_PX_W * 0.5f - 6.0f;
-static constexpr float SPAWN_Y = MAP_PX_H * 0.13f;
+static constexpr float SPAWN_Y = MAP_PX_H * 0.18f;  // above surface (~28% of map height)
 
 Character::Character() {
     m_body.position = {SPAWN_X, SPAWN_Y};
@@ -51,26 +51,44 @@ void Character::update(float dt, const InputManager& input, TerrainFacade& terra
 void Character::draw(Vector2 cam_offset) const {
     float sx = m_body.position.x - cam_offset.x;
     float sy = m_body.position.y - cam_offset.y;
-    float w  = m_body.size.x;
-    float h  = m_body.size.y;
+    float w  = m_body.size.x;   // 12px
+    float h  = m_body.size.y;   // 20px
 
-    // Body color by state (useful as debug indicator)
-    Color body_color;
+    // ── Body (lower 12px) ──
+    // Color shifts slightly by state as a subtle feedback cue
+    Color suit_color;
     switch (m_state) {
-        case CharState::IDLE: body_color = BLUE;   break;
-        case CharState::WALK: body_color = GREEN;  break;
-        case CharState::JUMP: body_color = YELLOW; break;
-        case CharState::FALL: body_color = ORANGE; break;
-        case CharState::DIG:  body_color = RED;    break;
-        default:              body_color = WHITE;  break;
+        case CharState::IDLE: suit_color = {60,  90,  180, 255}; break;
+        case CharState::WALK: suit_color = {50,  150, 80,  255}; break;
+        case CharState::JUMP: suit_color = {180, 160, 40,  255}; break;
+        case CharState::FALL: suit_color = {190, 100, 30,  255}; break;
+        case CharState::DIG:  suit_color = {180, 50,  50,  255}; break;
+        default:              suit_color = {80,  80,  80,  255}; break;
     }
+    DrawRectangle((int)sx,       (int)(sy + 10), (int)w, 10, suit_color);
 
-    DrawRectangle((int)sx, (int)sy, (int)w, (int)h, body_color);
+    // ── Legs (two small rectangles, animate when walking) ──
+    bool step = (m_state == CharState::WALK);
+    int leg_offset = step ? (int)(GetTime() * 8) % 2 : 0; // alternates 0/1
+    DrawRectangle((int)sx + 1, (int)(sy + 16) + leg_offset,     4, 4, suit_color);
+    DrawRectangle((int)sx + 7, (int)(sy + 16) + (1 - leg_offset), 4, 4, suit_color);
 
-    // Facing indicator: small dot on the front side
-    float dot_x = (m_facing > 0) ? sx + w - 3 : sx + 1;
-    float dot_y = sy + 4;
-    DrawRectangle((int)dot_x, (int)dot_y, 2, 2, WHITE);
+    // ── Head (circle, skin tone) ──
+    Color skin = {220, 170, 120, 255};
+    DrawCircle((int)(sx + w * 0.5f), (int)(sy + 6), 6, skin);
+
+    // ── Helmet ──
+    Color helmet = suit_color;
+    helmet.r = (unsigned char)(helmet.r > 50 ? helmet.r - 30 : 0);
+    DrawRectangle((int)(sx + 1), (int)(sy - 1), (int)w - 2, 5, helmet);
+
+    // ── Eyes (direction-aware) ──
+    // Eye white
+    int eye_x = (m_facing > 0) ? (int)(sx + 7) : (int)(sx + 2);
+    DrawRectangle(eye_x, (int)(sy + 4), 3, 3, WHITE);
+    // Pupil: shifts one pixel in facing direction
+    int pupil_x = (m_facing > 0) ? eye_x + 1 : eye_x;
+    DrawRectangle(pupil_x, (int)(sy + 5), 2, 2, {30, 30, 30, 255});
 }
 
 Vector2 Character::center() const {

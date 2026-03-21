@@ -12,5 +12,6 @@ public:
     void draw(const TerrainFacade& terrain, Vector2 camera_offset, int screen_w, int screen_h) const;
 
 private:
-    Color material_color(MaterialID mat) const;
+    // Returns the color for a cell, accounting for surface grass and per-cell variation
+    Color cell_color(const TerrainFacade& terrain, MaterialID mat, int cx, int cy) const;
 };
