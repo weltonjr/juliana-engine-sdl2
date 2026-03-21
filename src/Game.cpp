@@ -9,28 +9,23 @@ Game::Game(int screen_w, int screen_h)
       m_camera(screen_w, screen_h, MAP_PX_W, MAP_PX_H)
 {
     terrain_generate(m_terrain);
-    // Snap camera to center of map
-    m_camera.snap_to({m_cam_target_x, m_cam_target_y});
 }
 
 void Game::update(float dt) {
-    // Temporary camera pan with arrow keys (removed once character exists)
-    float pan_speed = 400.0f;
-    if (IsKeyDown(KEY_RIGHT)) m_cam_target_x += pan_speed * dt;
-    if (IsKeyDown(KEY_LEFT))  m_cam_target_x -= pan_speed * dt;
-    if (IsKeyDown(KEY_DOWN))  m_cam_target_y += pan_speed * dt;
-    if (IsKeyDown(KEY_UP))    m_cam_target_y -= pan_speed * dt;
-
-    m_camera.follow({m_cam_target_x, m_cam_target_y}, dt);
+    m_input.poll();
+    m_character.update(dt, m_input, m_terrain);
+    m_camera.follow(m_character.center(), dt);
 }
 
 void Game::draw() const {
-    ClearBackground({100, 149, 237, 255}); // Sky blue background
+    ClearBackground({100, 149, 237, 255}); // Sky blue
 
     Vector2 offset = m_camera.offset();
     m_terrain_renderer.draw(m_terrain, offset, m_screen_w, m_screen_h);
+    m_character.draw(offset);
 
     // HUD
     DrawFPS(10, 10);
-    DrawText("Aeterium v0.1 - Arrow keys to pan", 10, 30, 16, WHITE);
+    DrawText("A/D: move  SPACE: jump  C: dig", 10, 30, 14, WHITE);
+    DrawText(char_state_name(m_character.state()), 10, 48, 14, YELLOW);
 }

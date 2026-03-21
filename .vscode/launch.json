@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Aeterium",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/aeterium",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "cmake-build-debug"
+        },
+        {
+            "name": "Run Aeterium (no debug)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/aeterium",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "noDebug": true
+        }
+    ]
+}

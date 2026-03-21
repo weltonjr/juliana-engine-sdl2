@@ -1,0 +1,38 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cmake-configure",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["-B", "build", "-DCMAKE_BUILD_TYPE=Debug"],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": { "PATH": "/opt/homebrew/bin:${env:PATH}" }
+            },
+            "group": "build",
+            "presentation": { "reveal": "silent", "panel": "shared" }
+        },
+        {
+            "label": "cmake-build-debug",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--build", "build", "--parallel"],
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "env": { "PATH": "/opt/homebrew/bin:${env:PATH}" }
+            },
+            "group": { "kind": "build", "isDefault": true },
+            "presentation": { "reveal": "always", "panel": "shared" },
+            "dependsOn": "cmake-configure",
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": ["relative", "${workspaceFolder}"],
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1, "line": 2, "column": 3, "severity": 4, "message": 5
+                }
+            }
+        }
+    ]
+}
