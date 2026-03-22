@@ -1,35 +1,61 @@
 #include "InputManager.h"
-#include "raylib.h"
+#include <cstring>
 
-// Maps each Action to one or two raylib keys (either is enough)
-static int key_a(Action a) {
+// Maps Action to primary SDL scancode
+static SDL_Scancode scancode_a(Action a) {
     switch (a) {
-        case Action::MOVE_LEFT:  return KEY_A;
-        case Action::MOVE_RIGHT: return KEY_D;
-        case Action::JUMP:       return KEY_SPACE;
-        case Action::DIG:        return KEY_C;
+        case Action::MOVE_LEFT:  return SDL_SCANCODE_A;
+        case Action::MOVE_RIGHT: return SDL_SCANCODE_D;
+        case Action::JUMP:       return SDL_SCANCODE_SPACE;
+        case Action::DIG:        return SDL_SCANCODE_C;
     }
-    return 0;
+    return SDL_SCANCODE_UNKNOWN;
 }
-static int key_b(Action a) {
+
+// Maps Action to alternate SDL scancode
+static SDL_Scancode scancode_b(Action a) {
     switch (a) {
-        case Action::MOVE_LEFT:  return KEY_LEFT;
-        case Action::MOVE_RIGHT: return KEY_RIGHT;
-        case Action::JUMP:       return KEY_UP;
-        case Action::DIG:        return KEY_LEFT_CONTROL;
+        case Action::MOVE_LEFT:  return SDL_SCANCODE_LEFT;
+        case Action::MOVE_RIGHT: return SDL_SCANCODE_RIGHT;
+        case Action::JUMP:       return SDL_SCANCODE_UP;
+        case Action::DIG:        return SDL_SCANCODE_LCTRL;
     }
-    return 0;
+    return SDL_SCANCODE_UNKNOWN;
 }
 
 void InputManager::poll() {
-    constexpr int N = 4;
-    for (int i = 0; i < N; i++) {
-        Action a = static_cast<Action>(i);
-        bool held = IsKeyDown(key_a(a)) || IsKeyDown(key_b(a));
-        m_pressed[i] = held && !m_held[i]; // true only on the first frame
-        m_held[i]    = held;
+    // Save previous keyboard state for rising-edge detection
+    if (m_keys) {
+        std::memcpy(m_prev, m_keys, SDL_NUM_SCANCODES * sizeof(bool));
     }
+
+    // Pump SDL events (needed to update keyboard state)
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+        if (e.type == SDL_QUIT) m_quit = true;
+        if (e.type == SDL_KEYDOWN &&
+            e.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
+            m_quit = true;
+    }
+
+    m_keys = SDL_GetKeyboardState(nullptr);
 }
 
-bool InputManager::is_held   (Action a) const { return m_held   [static_cast<int>(a)]; }
-bool InputManager::is_pressed(Action a) const { return m_pressed[static_cast<int>(a)]; }
+bool InputManager::is_held(Action a) const {
+    if (!m_keys) return false;
+    SDL_Scancode sa = scancode_a(a);
+    SDL_Scancode sb = scancode_b(a);
+    return (sa != SDL_SCANCODE_UNKNOWN && m_keys[sa]) ||
+           (sb != SDL_SCANCODE_UNKNOWN && m_keys[sb]);
+}
+
+bool InputManager::is_pressed(Action a) const {
+    if (!m_keys) return false;
+    SDL_Scancode sa = scancode_a(a);
+    SDL_Scancode sb = scancode_b(a);
+    bool held_now = (sa != SDL_SCANCODE_UNKNOWN && m_keys[sa]) ||
+                    (sb != SDL_SCANCODE_UNKNOWN && m_keys[sb]);
+    bool held_prev = (sa != SDL_SCANCODE_UNKNOWN && m_prev[sa]) ||
+                     (sb != SDL_SCANCODE_UNKNOWN && m_prev[sb]);
+    return held_now && !held_prev;
+}

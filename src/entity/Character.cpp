@@ -2,6 +2,7 @@
 #include "../input/InputManager.h"
 #include "../terrain/TerrainFacade.h"
 #include "../core/Types.h"
+#include "../core/Color.h"
 
 // ── spawn position: center of map, just above the surface (~15% from top) ──
 static constexpr float SPAWN_X = MAP_PX_W * 0.5f - 6.0f;
@@ -48,13 +49,29 @@ void Character::update(float dt, const InputManager& input, TerrainFacade& terra
     update_state();
 }
 
-void Character::draw(Vector2 cam_offset) const {
-    float sx = m_body.position.x - cam_offset.x;
-    float sy = m_body.position.y - cam_offset.y;
-    float w  = m_body.size.x;   // 12px
-    float h  = m_body.size.y;   // 20px
+// Helper: fill a rectangle with a given Color using SDL2
+static void fill_rect(SDL_Renderer* r, int x, int y, int w, int h, Color c) {
+    SDL_SetRenderDrawColor(r, c.r, c.g, c.b, c.a);
+    SDL_Rect rect = {x, y, w, h};
+    SDL_RenderFillRect(r, &rect);
+}
 
-    // ── Body (lower 12px) ──
+// Helper: draw a filled circle approximation using filled rects (SDL2 has no circle primitive)
+static void fill_circle(SDL_Renderer* r, int cx, int cy, int radius, Color c) {
+    SDL_SetRenderDrawColor(r, c.r, c.g, c.b, c.a);
+    for (int dy = -radius; dy <= radius; dy++) {
+        int dx = (int)SDL_sqrt((double)(radius * radius - dy * dy));
+        SDL_RenderDrawLine(r, cx - dx, cy + dy, cx + dx, cy + dy);
+    }
+}
+
+void Character::draw(Vector2 cam_offset, SDL_Renderer* renderer) const {
+    int sx = (int)(m_body.position.x - cam_offset.x);
+    int sy = (int)(m_body.position.y - cam_offset.y);
+    int w  = (int)m_body.size.x;   // 12px
+    // int h  = (int)m_body.size.y;   // 20px (unused but kept for reference)
+
+    // ── Body (lower 10px) ──
     // Color shifts slightly by state as a subtle feedback cue
     Color suit_color;
     switch (m_state) {
@@ -65,30 +82,31 @@ void Character::draw(Vector2 cam_offset) const {
         case CharState::DIG:  suit_color = {180, 50,  50,  255}; break;
         default:              suit_color = {80,  80,  80,  255}; break;
     }
-    DrawRectangle((int)sx,       (int)(sy + 10), (int)w, 10, suit_color);
+    fill_rect(renderer, sx, sy + 10, w, 10, suit_color);
 
     // ── Legs (two small rectangles, animate when walking) ──
     bool step = (m_state == CharState::WALK);
-    int leg_offset = step ? (int)(GetTime() * 8) % 2 : 0; // alternates 0/1
-    DrawRectangle((int)sx + 1, (int)(sy + 16) + leg_offset,     4, 4, suit_color);
-    DrawRectangle((int)sx + 7, (int)(sy + 16) + (1 - leg_offset), 4, 4, suit_color);
+    Uint64 ticks = SDL_GetTicks64();
+    int leg_offset = step ? (int)((ticks / 125) % 2) : 0; // alternates 0/1 every ~125ms
+    fill_rect(renderer, sx + 1, sy + 16 + leg_offset,       4, 4, suit_color);
+    fill_rect(renderer, sx + 7, sy + 16 + (1 - leg_offset), 4, 4, suit_color);
 
-    // ── Head (circle, skin tone) ──
+    // ── Head (circle approximation, skin tone) ──
     Color skin = {220, 170, 120, 255};
-    DrawCircle((int)(sx + w * 0.5f), (int)(sy + 6), 6, skin);
+    fill_circle(renderer, sx + w / 2, sy + 6, 6, skin);
 
     // ── Helmet ──
     Color helmet = suit_color;
     helmet.r = (unsigned char)(helmet.r > 50 ? helmet.r - 30 : 0);
-    DrawRectangle((int)(sx + 1), (int)(sy - 1), (int)w - 2, 5, helmet);
+    fill_rect(renderer, sx + 1, sy - 1, w - 2, 5, helmet);
 
     // ── Eyes (direction-aware) ──
     // Eye white
-    int eye_x = (m_facing > 0) ? (int)(sx + 7) : (int)(sx + 2);
-    DrawRectangle(eye_x, (int)(sy + 4), 3, 3, WHITE);
+    int eye_x = (m_facing > 0) ? (sx + 7) : (sx + 2);
+    fill_rect(renderer, eye_x, sy + 4, 3, 3, WHITE);
     // Pupil: shifts one pixel in facing direction
     int pupil_x = (m_facing > 0) ? eye_x + 1 : eye_x;
-    DrawRectangle(pupil_x, (int)(sy + 5), 2, 2, {30, 30, 30, 255});
+    fill_rect(renderer, pupil_x, sy + 5, 2, 2, {30, 30, 30, 255});
 }
 
 Vector2 Character::center() const {

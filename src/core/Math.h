@@ -1,6 +1,8 @@
 #pragma once
 #include "Types.h"
-#include "raylib.h"
+
+// Vector2 replaces the raylib-provided type
+struct Vector2 { float x, y; };
 
 struct Vector2i {
     int x, y;

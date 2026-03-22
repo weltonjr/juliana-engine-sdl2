@@ -1,5 +1,5 @@
 #pragma once
-#include "raylib.h"
+#include "../core/Color.h"
 #include "../core/Types.h"
 
 // Per-cell deterministic brightness variation using a hash of cell coords.

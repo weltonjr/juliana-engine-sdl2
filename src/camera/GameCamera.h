@@ -1,5 +1,5 @@
 #pragma once
-#include "raylib.h"
+#include "../core/Math.h"
 
 // Smooth-follow camera. Lerps toward target position each frame.
 // Clamps to world bounds so the camera never shows outside the map.

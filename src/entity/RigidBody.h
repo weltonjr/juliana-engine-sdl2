@@ -1,5 +1,5 @@
 #pragma once
-#include "raylib.h"
+#include "../core/Math.h"
 #include "../core/Types.h"
 
 class TerrainFacade;

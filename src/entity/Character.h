@@ -1,7 +1,7 @@
 #pragma once
 #include "RigidBody.h"
 #include "CharacterFSM.h"
-#include "raylib.h"
+#include <SDL2/SDL.h>
 
 class TerrainFacade;
 class InputManager;
@@ -11,7 +11,7 @@ public:
     Character();
 
     void update(float dt, const InputManager& input, TerrainFacade& terrain);
-    void draw(Vector2 cam_offset) const;
+    void draw(Vector2 cam_offset, SDL_Renderer* renderer) const;
 
     // Read-only accessors for other systems (e.g. camera)
     Vector2    position() const { return m_body.position; }

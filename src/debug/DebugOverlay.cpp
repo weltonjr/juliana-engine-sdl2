@@ -2,54 +2,102 @@
 #include "../terrain/TerrainFacade.h"
 #include "../terrain/TerrainChunk.h"
 #include "../entity/Character.h"
+#include "../entity/CharacterFSM.h"
 #include "../camera/GameCamera.h"
 #include "../core/Types.h"
+#include "../core/Color.h"
 #include <cstdio>
 
-static constexpr int FONT_SIZE  = 14;
-static constexpr int LINE_H     = 17;
+static constexpr int LINE_H = 17;
+
+// ── SDL2 drawing helpers ────────────────────────────────────────────────────
+
+static void draw_rect_filled(SDL_Renderer* r, int x, int y, int w, int h,
+                              uint8_t cr, uint8_t cg, uint8_t cb, uint8_t ca) {
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
+    SDL_Rect rect = {x, y, w, h};
+    SDL_RenderFillRect(r, &rect);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+}
+
+static void draw_rect_lines(SDL_Renderer* r, int x, int y, int w, int h,
+                             uint8_t cr, uint8_t cg, uint8_t cb, uint8_t ca) {
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r, cr, cg, cb, ca);
+    SDL_Rect rect = {x, y, w, h};
+    SDL_RenderDrawRect(r, &rect);
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+}
+
+// Render a line of text; does nothing if font is null
+static void draw_text(SDL_Renderer* r, TTF_Font* font, const char* text,
+                      int x, int y, Color col) {
+    if (!font || !text || !*text) return;
+    SDL_Color sc = {col.r, col.g, col.b, col.a};
+    SDL_Surface* surf = TTF_RenderText_Blended(font, text, sc);
+    if (!surf) return;
+    int tw, th;
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
+    SDL_FreeSurface(surf);
+    if (!tex) return;
+    SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+    SDL_FRect dst = {(float)x, (float)y, (float)tw, (float)th};
+    SDL_RenderCopyF(r, tex, nullptr, &dst);
+    SDL_DestroyTexture(tex);
+}
 
 // ── public ─────────────────────────────────────────────────────────────────
 
 void DebugOverlay::draw(const TerrainFacade& terrain,
                         const Character&     character,
                         const GameCamera&    camera,
-                        int screen_w, int screen_h) const
+                        int screen_w, int screen_h,
+                        SDL_Renderer* renderer,
+                        TTF_Font*     font) const
 {
     if (!enabled) return;
 
     Vector2 cam_offset = camera.offset();
 
-    draw_chunk_grid(terrain, cam_offset, screen_w, screen_h);
-    draw_info_panel(character, camera);
+    draw_chunk_grid(terrain, cam_offset, screen_w, screen_h, renderer, font);
+    draw_info_panel(character, camera, renderer, font);
 }
 
 // ── private ────────────────────────────────────────────────────────────────
 
 void DebugOverlay::draw_info_panel(const Character&  character,
-                                   const GameCamera& camera) const
+                                   const GameCamera& camera,
+                                   SDL_Renderer* renderer,
+                                   TTF_Font*     font) const
 {
     // Semi-transparent background
     constexpr int PW = 300, PH = 160;
-    DrawRectangle(6, 6, PW, PH, {0, 0, 0, 160});
-    DrawRectangleLines(6, 6, PW, PH, {255, 255, 255, 80});
+    draw_rect_filled(renderer, 6, 6, PW, PH, 0, 0, 0, 160);
+    draw_rect_lines (renderer, 6, 6, PW, PH, 255, 255, 255, 80);
 
     char buf[128];
     int  y = 12;
     auto line = [&](const char* txt, Color col = WHITE) {
-        DrawText(txt, 12, y, FONT_SIZE, col);
+        draw_text(renderer, font, txt, 12, y, col);
         y += LINE_H;
     };
 
-    line("── DEBUG (F1 to hide) ──", GRAY);
+    line("-- DEBUG (F1 to hide) --", GRAY);
 
-    // FPS
-    snprintf(buf, sizeof(buf), "FPS: %d", GetFPS());
-    line(buf, GetFPS() >= 55 ? GREEN : RED);
+    // FPS via SDL ticks (simple estimate)
+    static Uint64 fps_prev  = 0;
+    static int    fps_value = 0;
+    Uint64 now_ticks = SDL_GetTicks64();
+    if (fps_prev > 0 && now_ticks > fps_prev) {
+        fps_value = (int)(1000 / (now_ticks - fps_prev));
+    }
+    fps_prev = now_ticks;
+    snprintf(buf, sizeof(buf), "FPS: %d", fps_value);
+    line(buf, fps_value >= 55 ? GREEN : RED);
 
     // Character
     Vector2 pos = character.position();
-    Vector2 cen = character.center();
     snprintf(buf, sizeof(buf), "State: %s", char_state_name(character.state()));
     line(buf, YELLOW);
 
@@ -71,7 +119,9 @@ void DebugOverlay::draw_info_panel(const Character&  character,
 
 void DebugOverlay::draw_chunk_grid(const TerrainFacade& terrain,
                                    Vector2 cam_offset,
-                                   int screen_w, int screen_h) const
+                                   int screen_w, int screen_h,
+                                   SDL_Renderer* renderer,
+                                   TTF_Font*     font) const
 {
     int cx_start = (int)(cam_offset.x / CHUNK_PX);
     int cy_start = (int)(cam_offset.y / CHUNK_PX);
@@ -92,21 +142,26 @@ void DebugOverlay::draw_chunk_grid(const TerrainFacade& terrain,
 
             // Dirty highlight: semi-transparent fill
             if (chunk.dirty_visual && chunk.dirty_collision) {
-                DrawRectangle(sx, sy, CHUNK_PX, CHUNK_PX, {255, 80, 80, 30});
+                draw_rect_filled(renderer, sx, sy, CHUNK_PX, CHUNK_PX, 255, 80, 80, 30);
             } else if (chunk.dirty_visual) {
-                DrawRectangle(sx, sy, CHUNK_PX, CHUNK_PX, {255, 200, 0, 25});
+                draw_rect_filled(renderer, sx, sy, CHUNK_PX, CHUNK_PX, 255, 200, 0, 25);
             } else if (chunk.dirty_collision) {
-                DrawRectangle(sx, sy, CHUNK_PX, CHUNK_PX, {0, 200, 255, 25});
+                draw_rect_filled(renderer, sx, sy, CHUNK_PX, CHUNK_PX, 0, 200, 255, 25);
             }
 
             // Chunk border
-            Color border_col = chunk.dirty_visual ? RED : (chunk.dirty_collision ? YELLOW : Color{255, 255, 255, 50});
-            DrawRectangleLines(sx, sy, CHUNK_PX, CHUNK_PX, border_col);
+            if (chunk.dirty_visual) {
+                draw_rect_lines(renderer, sx, sy, CHUNK_PX, CHUNK_PX, 255, 0, 0, 255);
+            } else if (chunk.dirty_collision) {
+                draw_rect_lines(renderer, sx, sy, CHUNK_PX, CHUNK_PX, 255, 235, 0, 255);
+            } else {
+                draw_rect_lines(renderer, sx, sy, CHUNK_PX, CHUNK_PX, 255, 255, 255, 50);
+            }
 
             // Chunk coordinates label (top-left corner)
             char label[16];
             snprintf(label, sizeof(label), "%d,%d", cx, cy);
-            DrawText(label, sx + 3, sy + 3, 10, {255, 255, 255, 120});
+            draw_text(renderer, font, label, sx + 3, sy + 3, {255, 255, 255, 120});
         }
     }
 }

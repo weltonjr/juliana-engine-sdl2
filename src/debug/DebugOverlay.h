@@ -1,5 +1,7 @@
 #pragma once
-#include "raylib.h"
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
+#include "../core/Math.h"
 
 class TerrainFacade;
 class Character;
@@ -18,13 +20,19 @@ public:
     void draw(const TerrainFacade& terrain,
               const Character&     character,
               const GameCamera&    camera,
-              int screen_w, int screen_h) const;
+              int screen_w, int screen_h,
+              SDL_Renderer* renderer,
+              TTF_Font*     font) const;
 
 private:
     void draw_info_panel(const Character& character,
-                         const GameCamera& camera) const;
+                         const GameCamera& camera,
+                         SDL_Renderer* renderer,
+                         TTF_Font*     font) const;
 
     void draw_chunk_grid(const TerrainFacade& terrain,
                          Vector2 cam_offset,
-                         int screen_w, int screen_h) const;
+                         int screen_w, int screen_h,
+                         SDL_Renderer* renderer,
+                         TTF_Font*     font) const;
 };

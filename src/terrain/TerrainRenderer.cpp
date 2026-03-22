@@ -4,20 +4,21 @@
 
 // ── public ─────────────────────────────────────────────────────────────────
 
-void TerrainRenderer::bake_dirty_chunks(TerrainFacade& terrain) {
+void TerrainRenderer::bake_dirty_chunks(TerrainFacade& terrain, SDL_Renderer* renderer) {
     // Iterate all chunks — bake any that are dirty.
     // With only 32 chunks total this is fast even when all are dirty at startup.
     for (int cy = 0; cy < terrain.chunks_y(); cy++)
         for (int cx = 0; cx < terrain.chunks_x(); cx++) {
             TerrainChunk& chunk = terrain.get_chunk(cx, cy);
             if (chunk.dirty_visual)
-                bake_chunk(chunk, terrain);
+                bake_chunk(chunk, terrain, renderer);
         }
 }
 
 void TerrainRenderer::draw(const TerrainFacade& terrain,
                             Vector2 camera_offset,
-                            int screen_w, int screen_h) const
+                            int screen_w, int screen_h,
+                            SDL_Renderer* renderer) const
 {
     // Visible chunk range
     int cx0 = (int)(camera_offset.x / CHUNK_PX);
@@ -40,10 +41,9 @@ void TerrainRenderer::draw(const TerrainFacade& terrain,
 
             // src: CHUNK_CELLS × CHUNK_CELLS texels (one per cell)
             // dst: CHUNK_PX × CHUNK_PX screen pixels  (CELL_SIZE scale = 4×)
-            // No Y-flip needed — Texture2D (not RenderTexture2D) is top-down.
-            Rectangle src  = { 0.0f, 0.0f, (float)CHUNK_CELLS, (float)CHUNK_CELLS };
-            Rectangle dest = { sx,   sy,   (float)CHUNK_PX,    (float)CHUNK_PX    };
-            DrawTexturePro(chunk.tex, src, dest, {0.0f, 0.0f}, 0.0f, WHITE);
+            SDL_Rect  src = {0, 0, CHUNK_CELLS, CHUNK_CELLS};
+            SDL_FRect dst = {sx, sy, (float)CHUNK_PX, (float)CHUNK_PX};
+            SDL_RenderCopyF(renderer, chunk.tex, &src, &dst);
         }
     }
 }
@@ -51,11 +51,16 @@ void TerrainRenderer::draw(const TerrainFacade& terrain,
 // ── private ────────────────────────────────────────────────────────────────
 
 void TerrainRenderer::bake_chunk(TerrainChunk& chunk,
-                                  const TerrainFacade& terrain) const
+                                  const TerrainFacade& terrain,
+                                  SDL_Renderer* renderer) const
 {
-    // Build a CHUNK_CELLS × CHUNK_CELLS CPU image (1 px = 1 cell)
-    Image img = GenImageColor(CHUNK_CELLS, CHUNK_CELLS, {0, 0, 0, 0});
+    // Build a CHUNK_CELLS × CHUNK_CELLS CPU surface (1 px = 1 cell)
+    SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(
+        0, CHUNK_CELLS, CHUNK_CELLS, 32, SDL_PIXELFORMAT_RGBA32);
+    SDL_FillRect(surf, nullptr, 0); // transparent
 
+    SDL_LockSurface(surf);
+    Uint32* pixels  = (Uint32*)surf->pixels;
     int base_cx = chunk.chunk_x * CHUNK_CELLS;
     int base_cy = chunk.chunk_y * CHUNK_CELLS;
 
@@ -67,16 +72,18 @@ void TerrainRenderer::bake_chunk(TerrainChunk& chunk,
             MaterialID mat = terrain.get_material(gcx, gcy);
             if (mat == MaterialID::EMPTY || mat == MaterialID::AIR) continue;
 
-            ImageDrawPixel(&img, lx, ly, material_cell_color(mat, gcx, gcy));
+            Color c = material_cell_color(mat, gcx, gcy);
+            pixels[ly * CHUNK_CELLS + lx] =
+                SDL_MapRGBA(surf->format, c.r, c.g, c.b, c.a);
         }
     }
+    SDL_UnlockSurface(surf);
 
     // Upload to GPU
-    if (chunk.tex_valid) UnloadTexture(chunk.tex);
-    chunk.tex = LoadTextureFromImage(img);
-    SetTextureFilter(chunk.tex, TEXTURE_FILTER_POINT); // sharp pixels, no blur
+    if (chunk.tex_valid) SDL_DestroyTexture(chunk.tex);
+    chunk.tex = SDL_CreateTextureFromSurface(renderer, surf);
+    SDL_SetTextureScaleMode(chunk.tex, SDL_ScaleModeNearest); // sharp pixels
+    SDL_FreeSurface(surf);
     chunk.tex_valid    = true;
     chunk.dirty_visual = false;
-
-    UnloadImage(img);
 }

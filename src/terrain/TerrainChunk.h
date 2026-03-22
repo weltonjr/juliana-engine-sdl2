@@ -1,5 +1,5 @@
 #pragma once
-#include "raylib.h"
+#include <SDL2/SDL.h>
 
 // Per-chunk metadata — dirty flags drive rebuild of visual and collision data.
 struct TerrainChunk {
@@ -10,8 +10,8 @@ struct TerrainChunk {
 
     // GPU texture baked from the chunk's cells (CHUNK_CELLS × CHUNK_CELLS texels,
     // drawn scaled to CHUNK_PX × CHUNK_PX on screen). Rebuilt when dirty_visual.
-    Texture2D tex       = {};
-    bool      tex_valid = false;
+    SDL_Texture* tex      = nullptr;
+    bool         tex_valid = false;
 
     void mark_dirty() {
         dirty_visual    = true;
