@@ -33,6 +33,8 @@ There are four definition types, each identified by its TOML section header:
 | Object | `[object]` TOML | A spawnable game entity (character, building, item, projectile) |
 | Aspect | `[aspect]` TOML | A reusable behavior script that attaches to objects or scenarios |
 | Procedure | `[procedure]` TOML | A movement/physics mode used by actions |
+| Material | `[material]` TOML + optional Lua | Terrain cell type with physics, visuals, and behavior script |
+| Background | `[background]` TOML | Visual-only background layer rendered behind terrain |
 | Scenario | `scenario.json` | A playable level: map generation, player slots, rule aspects |
 
 ---
@@ -1084,6 +1086,416 @@ end
 
 ---
 
+## Terrain System
+
+### Overview
+
+The terrain is a **cell grid** where each cell is 1 pixel. Every cell stores a foreground material and a background material. The foreground has full physics simulation (collision, gravity, liquid flow). The background is visual only — it's revealed when the foreground is removed (e.g., digging dirt inside a mountain reveals the rock wall behind it).
+
+### Cell Data
+
+Each cell is 2 bytes:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `material_id` | uint8 | Foreground material (0 = air) |
+| `background_id` | uint8 | Background visual (0 = none / open sky) |
+
+A 2048×512 map = ~2MB. Cache-friendly for simulation and rendering.
+
+### Material States
+
+Each material has a physics state that determines how the engine simulates it:
+
+| State | Behavior |
+|---|---|
+| `solid` | Static. Doesn't move. Entities collide with it. Must be dug or blasted to remove. |
+| `powder` | Falls due to gravity. Piles up on surfaces. Acts as solid for entity collision. Can be dug easily. |
+| `liquid` | Falls due to gravity. Spreads horizontally. Entities can swim in it. Pressure-based simulation (details TBD). |
+
+Gas state is reserved for future implementation.
+
+### Liquid Simulation
+
+Liquid materials use pressure-based simulation. Connected liquid cells form **bodies** that equalize their surface levels, enabling water to flow through U-shaped tunnels and rise to equalize. Detailed algorithm TBD.
+
+### Terrain Modification
+
+The engine provides APIs for modifying terrain at runtime:
+
+```lua
+-- Set a single cell's material
+SetMaterial(x, y, "base:Dirt")
+
+-- Set a single cell's background
+SetBackground(x, y, "base:RockWall")
+
+-- Fill a circular area with a material
+FillCircle(x, y, radius, "base:Rock")
+
+-- Check material at position
+local mat = GetMaterial(x, y)
+local bg = GetBackground(x, y)
+
+-- Check material properties
+local is_solid = IsSolid(x, y)
+local is_liquid = IsLiquid(x, y)
+```
+
+When terrain is modified:
+1. Affected cells update their `material_id`
+2. Background is revealed (or replaced if specified)
+3. Powder/liquid cells above the removed area are marked for gravity simulation
+4. Nearby liquid bodies are flagged for recalculation
+5. `dig_product` objects are spawned if the material defines one
+
+### Simulation Order (Per Tick)
+
+```
+1. Process powder cells (top-to-bottom scan):
+   - If cell below is empty → fall
+   - If cell below is occupied → try diagonal (pile behavior)
+2. Process liquid cells:
+   - Fall into empty space below
+   - Spread horizontally at flow_rate
+   - Equalize pressure within connected bodies (TBD)
+3. Process material scripts:
+   - For each material type with a script, call OnMaterialTick()
+   - Handles interactions (lava touching water), damage, etc.
+```
+
+---
+
+## Material Definitions
+
+### Overview
+
+A material is a definition type that describes a terrain cell's physics, visual, and behavior. Materials are defined in packages like all other definitions.
+
+### On Disk
+
+```
+packages/base/materials/
+├── Dirt/
+│   ├── definition.toml      # [material]
+│   ├── script.lua           # optional — behavior script
+│   └── dirt.png             # optional — texture tile
+├── Rock/
+│   ├── definition.toml
+│   └── rock.png
+├── Water/
+│   ├── definition.toml
+│   └── script.lua
+├── Lava/
+│   ├── definition.toml
+│   └── script.lua
+└── Sand/
+    └── definition.toml
+```
+
+### definition.toml Examples
+
+```toml
+# Dirt — basic solid terrain
+[material]
+id = "Dirt"
+name = "Dirt"
+
+[physics]
+state = "solid"
+density = 100                # used for sorting: heavier sinks below lighter
+friction = 0.8               # surface friction for entities
+hardness = 30                # dig difficulty (ticks per cell)
+
+[visual]
+color = [139, 119, 101]      # base render color
+texture = "dirt.png"         # optional tiling texture
+color_variation = 10         # random RGB offset per cell for natural look
+
+[behavior]
+gravity = false              # solid dirt doesn't fall
+flammable = false
+blast_resistance = 20
+```
+
+```toml
+# Rock — hard solid terrain
+[material]
+id = "Rock"
+name = "Rock"
+
+[physics]
+state = "solid"
+density = 200
+friction = 0.9
+hardness = 80
+
+[visual]
+color = [128, 128, 128]
+texture = "rock.png"
+color_variation = 8
+
+[behavior]
+gravity = false
+flammable = false
+blast_resistance = 80
+```
+
+```toml
+# Sand — powder that falls and piles
+[material]
+id = "Sand"
+name = "Sand"
+
+[physics]
+state = "powder"
+density = 90
+friction = 0.6
+hardness = 10
+
+[visual]
+color = [210, 190, 140]
+color_variation = 12
+
+[behavior]
+gravity = true
+flammable = false
+blast_resistance = 5
+```
+
+```toml
+# Water — liquid
+[material]
+id = "Water"
+name = "Water"
+
+[physics]
+state = "liquid"
+density = 50
+friction = 0.2
+hardness = 0                 # cannot dig water
+
+[visual]
+color = [60, 100, 200]
+transparency = 0.5
+color_variation = 5
+
+[behavior]
+gravity = true
+flow_rate = 3                # horizontal spread speed (cells per tick)
+```
+
+```toml
+# Lava — dangerous liquid
+[material]
+id = "Lava"
+name = "Lava"
+
+[physics]
+state = "liquid"
+density = 80
+friction = 0.4
+hardness = 0
+
+[visual]
+color = [255, 80, 20]
+transparency = 0.3
+glow = true                  # emits light
+color_variation = 15
+
+[behavior]
+gravity = true
+flow_rate = 1
+```
+
+```toml
+# GoldOre — solid ore vein
+[material]
+id = "GoldOre"
+name = "Gold Ore"
+
+[physics]
+state = "solid"
+density = 180
+friction = 0.9
+hardness = 60
+
+[visual]
+color = [200, 170, 50]
+texture = "gold_ore.png"
+color_variation = 10
+
+[behavior]
+gravity = false
+flammable = false
+blast_resistance = 60
+```
+
+### Material Scripts
+
+Materials can have an optional `script.lua` that handles behavior — including interactions with other materials, damage to entities, and environmental effects. The script runs per material type, not per cell (the engine batches calls).
+
+```lua
+-- Lava/script.lua
+
+-- Called each tick for cells of this material that are adjacent to other materials
+-- adjacents is a list of {x, y, material_id} for neighboring cells
+function OnAdjacentContact(x, y, adjacents)
+    for _, adj in ipairs(adjacents) do
+        -- Lava + Water = Rock (obsidian) + steam
+        if adj.material_id == "base:Water" then
+            SetMaterial(adj.x, adj.y, "base:Air")
+            SetMaterial(x, y, "base:Rock")
+            SpawnParticle("steam", x, y)
+            PlaySound("sizzle", x, y)
+            return  -- this cell is now rock, stop processing
+        end
+        -- Lava ignites flammable materials
+        if GetMaterialProperty(adj.material_id, "behavior.flammable") then
+            SetMaterial(adj.x, adj.y, "base:Air")
+            SpawnParticle("fire", adj.x, adj.y)
+        end
+    end
+end
+
+-- Called when an entity overlaps cells of this material
+function OnEntityContact(x, y, entity_id)
+    DealDamage(entity_id, 50 * GetDeltaTime(), nil)
+    SpawnParticle("burn", x, y)
+end
+```
+
+```lua
+-- Water/script.lua
+
+function OnEntityContact(x, y, entity_id)
+    -- extinguish burning entities
+    SendMessageTo(entity_id, "extinguish", {})
+end
+
+function OnAdjacentContact(x, y, adjacents)
+    for _, adj in ipairs(adjacents) do
+        -- Water dissolves loose dirt over time
+        if adj.material_id == "base:LooseDirt" then
+            if math.random() < 0.01 then
+                SetMaterial(adj.x, adj.y, "base:Water")
+            end
+        end
+    end
+end
+```
+
+### Material Callbacks
+
+| Callback | When |
+|---|---|
+| `OnAdjacentContact(x, y, adjacents)` | This material cell has a neighbor of a different type. Called in batches per tick. |
+| `OnEntityContact(x, y, entity_id)` | An entity overlaps a cell of this material |
+| `OnDug(x, y, digger_id)` | A cell of this material was dug by an entity |
+| `OnBlasted(x, y)` | A cell of this material was hit by an explosion |
+
+### Performance Note
+
+`OnAdjacentContact` is the expensive callback — it could fire for every liquid/lava surface cell every tick. The engine optimizes by:
+- Only calling it for materials that define the callback (if Dirt has no script, it's skipped)
+- Only checking cells at **boundaries** (where material changes), not interior cells
+- Batching: the engine collects all boundary cells per material type, then calls the script once with the full list (not once per cell)
+- Not self iteraction, the engine will not pass a bondary that is of the same material
+
+---
+
+## Background Definitions
+
+### Overview
+
+Backgrounds are visual-only materials that render behind the foreground terrain. They are revealed when foreground cells are removed (digging, blasting). They have no physics, no collision, and no simulation.
+
+### On Disk
+
+```
+packages/base/backgrounds/
+├── DirtWall/
+│   ├── definition.toml      # [background]
+│   └── dirt_wall.png        # optional texture
+├── RockWall/
+│   ├── definition.toml
+│   └── rock_wall.png
+└── Sky/
+    └── definition.toml
+```
+
+### definition.toml
+
+```toml
+# DirtWall — behind dirt terrain
+[background]
+id = "DirtWall"
+name = "Dirt Wall"
+
+[visual]
+color = [90, 75, 60]         # darker than foreground dirt
+texture = "dirt_wall.png"
+color_variation = 6
+```
+
+```toml
+# RockWall — behind rock terrain
+[background]
+id = "RockWall"
+name = "Rock Wall"
+
+[visual]
+color = [80, 80, 85]
+texture = "rock_wall.png"
+color_variation = 5
+```
+
+```toml
+# Sky — open sky background (no visual, just marks "outdoors")
+[background]
+id = "Sky"
+name = "Open Sky"
+
+[visual]
+color = [0, 0, 0]            # not rendered — sky/parallax shows through
+transparent = true
+```
+
+### Rendering Order
+
+```
+1. Sky / parallax background layers
+2. Background cells (where foreground is air and background is not Sky)
+3. Foreground terrain cells
+4. Entities
+5. Particles / effects
+6. UI / HUD
+```
+
+Background cells render with a darkened tint or a separate texture to visually distinguish "inside a tunnel" from "open air".
+
+### Map Generator Background Assignment
+
+During map generation Pass 2, backgrounds are assigned alongside foreground materials:
+
+- Surface dirt cells with sky above → background = `Sky`
+- Dirt cells deep inside terrain → background = `DirtWall`
+- Rock cells → background = `RockWall`
+- Cells below sea level with water above → background = `Sky` (underwater open areas)
+
+This is configured in the scenario's material rules:
+
+```json
+{
+    "materials": [
+        { "id": "base:Dirt", "rule": "surface_layer", "depth": 30, "background": "base:DirtWall" },
+        { "id": "base:Rock", "rule": "deep", "min_depth": 60, "background": "base:RockWall" }
+    ]
+}
+```
+
+---
+
 ## World Query API
 
 Scenario aspects and entity scripts can query the world for positions and spatial information. This supports wildlife spawning, AI navigation, and dynamic placement.
@@ -1128,7 +1540,4 @@ local id, dist = FindNearest(x, y, category)
 -- Distance from position to nearest player
 local dist = GetNearestPlayerDistance(x, y)
 
--- Find nearest cave (open underground space)
-local cave = FindNearestCave(x, y, search_radius)
--- Returns {x, y, width, height} of the cave bounds, or nil
 ```
