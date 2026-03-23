@@ -1,0 +1,21 @@
+[material]
+id = "GoldOre"
+name = "Gold Ore"
+
+[physics]
+state = "solid"
+density = 180
+friction = 0.9
+hardness = 60
+
+[visual]
+color = [200, 170, 50]
+color_variation = 10
+
+[behavior]
+gravity = false
+flammable = false
+blast_resistance = 60
+dig_product = "base:GoldChunk"
+small_fragment = "base:GoldDust"
+min_fragment_pixels = 8

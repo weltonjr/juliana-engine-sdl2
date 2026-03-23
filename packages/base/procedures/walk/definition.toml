@@ -1,0 +1,5 @@
+[procedure]
+id = "walk"
+name = "Ground Walk"
+description = "Horizontal ground movement with step-up traversal"
+engine_impl = "walk"

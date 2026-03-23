@@ -1,0 +1,5 @@
+[procedure]
+id = "dig"
+name = "Dig"
+description = "Immobile, removes terrain cells per tick within radius"
+engine_impl = "dig"

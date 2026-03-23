@@ -1,0 +1,5 @@
+[procedure]
+id = "push"
+name = "Push"
+description = "Like walk but reduced speed, moves target entity along"
+engine_impl = "push"
