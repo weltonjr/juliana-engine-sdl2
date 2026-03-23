@@ -1,0 +1,56 @@
+{
+    "scenario": {
+        "id": "GoldRush",
+        "name": "Gold Rush",
+        "description": "Dig deep, find gold, build your fortune",
+        "packages": ["base"],
+        "aspects": []
+    },
+
+    "map": {
+        "width": 2048,
+        "height": 512,
+        "seed": 0,
+
+        "shape": "flat",
+        "shape_params": {
+            "surface_level": 0.35,
+            "roughness": 0.5
+        },
+
+        "materials": [
+            { "id": "base:Air", "rule": "above_surface" },
+            { "id": "base:Dirt", "rule": "surface_layer", "depth": 30, "background": "base:DirtWall" },
+            { "id": "base:Rock", "rule": "deep", "min_depth": 40, "background": "base:RockWall" },
+            { "id": "base:Dirt", "rule": "fill", "background": "base:DirtWall" }
+        ],
+
+        "features": [
+            { "type": "caves", "density": 0.05, "min_size": 8, "max_size": 20, "zone": "underground" },
+            { "type": "ore_veins", "material": "base:GoldOre", "density": 0.03, "vein_radius": 6, "zone": "rock" },
+            { "type": "ore_veins", "material": "base:CoalOre", "density": 0.02, "vein_radius": 5, "zone": "rock" },
+            { "type": "lakes", "count": 2, "min_size": 40, "max_size": 80, "zone": "surface" }
+        ]
+    },
+
+    "players": {
+        "slots": [
+            {
+                "type": "required",
+                "team": 1,
+                "spawn": {
+                    "zone": "surface",
+                    "constraints": {
+                        "min_flat_width": 32,
+                        "min_sky_above": 40,
+                        "avoid_water": true,
+                        "min_player_distance": 200
+                    }
+                },
+                "objects": [
+                    { "definition": "base:Character" }
+                ]
+            }
+        ]
+    }
+}

@@ -34,6 +34,12 @@ struct Entity {
     // Facing direction: 1 = right, -1 = left
     int facing = 1;
 
+    // Dig state
+    int dig_dir_x = 0;  // -1, 0, 1
+    int dig_dir_y = 0;  // -1, 0, 1
+    int dig_timer = 0;
+    int dig_radius = 12;
+
     // Owner player slot (0 = unowned)
     uint32_t owner_slot = 0;
 

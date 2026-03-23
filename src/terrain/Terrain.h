@@ -18,6 +18,9 @@ public:
     void SetBackground(int x, int y, BackgroundID bg);
     bool InBounds(int x, int y) const;
 
+    // Dig a circular area — returns number of cells removed
+    int DigCircle(int cx, int cy, int radius, MaterialID air_id);
+
     int GetWidth() const { return width_; }
     int GetHeight() const { return height_; }
 

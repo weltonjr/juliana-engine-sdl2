@@ -12,6 +12,9 @@
 #include "entity/EntityManager.h"
 #include "entity/ActionMap.h"
 #include "physics/PhysicsSystem.h"
+#include "terrain/TerrainSimulator.h"
+#include "scenario/ScenarioDef.h"
+#include "scenario/ScenarioLoader.h"
 #include "render/DebugUI.h"
 #include <memory>
 #include <unordered_map>
@@ -53,6 +56,7 @@ private:
     std::unique_ptr<InputSystem> input_;
     std::unique_ptr<EntityManager> entity_manager_;
     std::unique_ptr<PhysicsSystem> physics_;
+    std::unique_ptr<TerrainSimulator> terrain_sim_;
 
     // Action maps keyed by object qualified_id
     std::unordered_map<std::string, ActionMap> action_maps_;

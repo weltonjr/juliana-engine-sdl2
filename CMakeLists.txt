@@ -19,7 +19,13 @@ FetchContent_Declare(tomlplusplus
     GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
     GIT_TAG v3.4.0
 )
-FetchContent_MakeAvailable(tomlplusplus)
+
+FetchContent_Declare(json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+)
+
+FetchContent_MakeAvailable(tomlplusplus json)
 
 # --- Engine executable ---
 file(GLOB_RECURSE SOURCES "src/*.cpp")
@@ -29,6 +35,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL2::SDL2
     SDL2_ttf::SDL2_ttf
     tomlplusplus::tomlplusplus
+    nlohmann_json::nlohmann_json
 )
 
 if(APPLE)

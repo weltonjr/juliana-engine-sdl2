@@ -1,0 +1,57 @@
+{
+    "scenario": {
+        "id": "IslandAdventure",
+        "name": "Island Adventure",
+        "description": "Survive on a remote island surrounded by water",
+        "packages": ["base"],
+        "aspects": []
+    },
+
+    "map": {
+        "width": 2048,
+        "height": 512,
+        "seed": 0,
+
+        "shape": "island",
+        "shape_params": {
+            "sea_level": 0.6,
+            "terrain_height": 0.4,
+            "roughness": 0.5
+        },
+
+        "materials": [
+            { "id": "base:Air", "rule": "above_surface" },
+            { "id": "base:Sand", "rule": "surface_layer", "depth": 5, "background": "base:DirtWall" },
+            { "id": "base:Dirt", "rule": "surface_layer", "depth": 25, "background": "base:DirtWall" },
+            { "id": "base:Rock", "rule": "deep", "min_depth": 35, "background": "base:RockWall" },
+            { "id": "base:Dirt", "rule": "fill", "background": "base:DirtWall" }
+        ],
+
+        "features": [
+            { "type": "caves", "density": 0.04, "min_size": 6, "max_size": 18, "zone": "underground" },
+            { "type": "ore_veins", "material": "base:GoldOre", "density": 0.04, "vein_radius": 7, "zone": "rock" },
+            { "type": "ore_veins", "material": "base:CoalOre", "density": 0.02, "vein_radius": 5, "zone": "rock" }
+        ]
+    },
+
+    "players": {
+        "slots": [
+            {
+                "type": "required",
+                "team": 1,
+                "spawn": {
+                    "zone": "surface",
+                    "constraints": {
+                        "min_flat_width": 20,
+                        "min_sky_above": 40,
+                        "avoid_water": true,
+                        "min_player_distance": 200
+                    }
+                },
+                "objects": [
+                    { "definition": "base:Character" }
+                ]
+            }
+        ]
+    }
+}

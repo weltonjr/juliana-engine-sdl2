@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core/FixedPoint.h"
+#include "package/MaterialDef.h"
+#include <vector>
 
 class EntityManager;
 class Terrain;
@@ -21,4 +23,7 @@ private:
 
     const DefinitionRegistry& registry_;
     Fixed gravity_;
+
+    // Fast collision lookup: true if material blocks movement
+    std::vector<bool> solid_lut_;
 };

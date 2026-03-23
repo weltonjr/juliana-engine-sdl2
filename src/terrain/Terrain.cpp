@@ -25,6 +25,24 @@ void Terrain::SetBackground(int x, int y, BackgroundID bg) {
     cells_[y * width_ + x].background_id = bg;
 }
 
+int Terrain::DigCircle(int cx, int cy, int radius, MaterialID air_id) {
+    int count = 0;
+    for (int dy = -radius; dy <= radius; dy++) {
+        for (int dx = -radius; dx <= radius; dx++) {
+            if (dx * dx + dy * dy > radius * radius) continue;
+            int px = cx + dx;
+            int py = cy + dy;
+            if (!InBounds(px, py)) continue;
+            Cell cell = GetCell(px, py);
+            if (cell.material_id != air_id) {
+                SetMaterial(px, py, air_id);
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
 bool Terrain::InBounds(int x, int y) const {
     return x >= 0 && x < width_ && y >= 0 && y < height_;
 }
