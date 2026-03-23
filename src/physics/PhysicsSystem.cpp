@@ -37,6 +37,14 @@ int PhysicsSystem::TryStepUp(const Terrain& terrain, int x, int y, int w, int h,
 void PhysicsSystem::ApplyGravity(Entity& entity, Fixed dt) {
     if (entity.definition && entity.definition->physics_mode != PhysicsMode::Dynamic) return;
 
+    // Don't accumulate gravity while on ground
+    if (entity.on_ground) {
+        if (entity.vel_y > Fixed::Zero()) {
+            entity.vel_y = Fixed::Zero();
+        }
+        return;
+    }
+
     entity.vel_y += gravity_ * dt;
 
     // Clamp to max fall speed
@@ -99,8 +107,8 @@ void PhysicsSystem::MoveEntity(Entity& entity, const Terrain& terrain, Fixed dt)
         entity.vel_y = Fixed::Zero();
     } else {
         entity.pos_y = new_y;
-        // Check if still on ground (one pixel below)
-        entity.on_ground = CheckTerrainOverlap(terrain, ix, new_iy + 1, entity.width, 1);
+        // Check if still on ground (one pixel below the entity's feet)
+        entity.on_ground = CheckTerrainOverlap(terrain, ix, new_iy + entity.height, entity.width, 1);
     }
 }
 
