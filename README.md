@@ -40,3 +40,4 @@ src/
 - C++17
 - SDL2
 - CMake 3.14+
+Lets fix some things:
