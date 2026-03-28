@@ -7,7 +7,7 @@ EntityManager::EntityManager(const DefinitionRegistry& registry)
 {
 }
 
-EntityID EntityManager::Spawn(const std::string& def_id, Fixed x, Fixed y) {
+EntityID EntityManager::Spawn(const std::string& def_id, float x, float y) {
     const ObjectDef* def = registry_.GetObject(def_id);
     if (!def) {
         std::fprintf(stderr, "Cannot spawn unknown object: %s\n", def_id.c_str());
@@ -33,7 +33,7 @@ EntityID EntityManager::Spawn(const std::string& def_id, Fixed x, Fixed y) {
     RebuildSortedIDs();
 
     std::printf("Spawned entity %u (%s) at %.1f, %.1f\n",
-        id, def_id.c_str(), x.ToFloat(), y.ToFloat());
+        id, def_id.c_str(), x, y);
     return id;
 }
 

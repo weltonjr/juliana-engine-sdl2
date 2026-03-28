@@ -3,6 +3,7 @@ id = "Character"
 name = "Adventurer"
 category = ["Living", "Controllable"]
 aspects = []
+player_controllable = true
 
 [physics]
 mode = "dynamic"

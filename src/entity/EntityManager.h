@@ -10,7 +10,7 @@ class EntityManager {
 public:
     EntityManager(const DefinitionRegistry& registry);
 
-    EntityID Spawn(const std::string& def_id, Fixed x, Fixed y);
+    EntityID Spawn(const std::string& def_id, float x, float y);
     void QueueDestroy(EntityID id);
     void ProcessQueues();
 

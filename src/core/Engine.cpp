@@ -1,26 +1,17 @@
 #include "core/Engine.h"
-#include "core/FixedPoint.h"
-#include <cassert>
+#include "input/InputAction.h"
+#include <cmath>
 #include <cstdio>
 
 Engine::Engine() = default;
 Engine::~Engine() = default;
 
 void Engine::Init() {
-    // Verify FixedPoint sanity
-    {
-        auto a = Fixed::FromInt(3);
-        auto b = Fixed::FromInt(4);
-        assert((a * b) == Fixed::FromInt(12));
-        auto c = Fixed::FromFloat(1.5f);
-        float cf = c.ToFloat();
-        assert(cf > 1.49f && cf < 1.51f);
-        std::printf("FixedPoint sanity checks passed.\n");
-    }
-
     window_ = std::make_unique<Window>("Aeterium", WINDOW_WIDTH, WINDOW_HEIGHT);
-    input_ = std::make_unique<InputSystem>();
-    camera_ = std::make_unique<Camera>(WINDOW_WIDTH, WINDOW_HEIGHT, 2.0f);
+    input_  = std::make_unique<InputManager>(1);  // 1 local player slot
+
+    // Camera for player 0 (full viewport). Future splitscreen adds more cameras here.
+    cameras_.push_back(std::make_unique<Camera>(WINDOW_WIDTH, WINDOW_HEIGHT, 2.0f));
 
     // Load packages
     PackageLoader loader(registry_);
@@ -52,10 +43,11 @@ void Engine::Init() {
 
     // Create systems
     entity_manager_ = std::make_unique<EntityManager>(registry_);
-    physics_ = std::make_unique<PhysicsSystem>(registry_);
-    terrain_sim_ = std::make_unique<TerrainSimulator>(registry_);
+    physics_        = std::make_unique<PhysicsSystem>(registry_);
+    terrain_sim_    = std::make_unique<TerrainSimulator>(registry_);
 
-    // Find spawn position (TODO: temporary, need to be moved to a system resposible for creating objects on the map, and pass the scenario start objects)
+    // Find spawn position (TODO: need to be moved to a system responsible for creating objects
+    // on the map, and pass the scenario start objects)
     int spawn_x, spawn_y;
     if (scenario && !scenario->players.empty()) {
         auto positions = MapGenerator::FindSpawnPositions(*terrain_, registry_, scenario->players);
@@ -66,22 +58,31 @@ void Engine::Init() {
         spawn_y = MapGenerator::FindSurfaceY(*terrain_, spawn_x, registry_) - 21;
     }
 
-    player_entity_id_ = entity_manager_->Spawn(
-        "base:Character", //TODO: need to pull the type from the scenario
-        Fixed::FromInt(spawn_x),
-        Fixed::FromInt(spawn_y)
+    EntityID spawned = entity_manager_->Spawn(
+        "base:Character",  // TODO: pull type from scenario
+        static_cast<float>(spawn_x),
+        static_cast<float>(spawn_y)
     );
 
-    // Center camera on player
-    float cam_x = static_cast<float>(spawn_x) - camera_->GetViewWorldWidth() / 2.0f;
-    float cam_y = static_cast<float>(spawn_y) - camera_->GetViewWorldHeight() / 2.0f;
-    camera_->SetPosition(cam_x, cam_y);
-    camera_->ClampToBounds(terrain_->GetWidth(), terrain_->GetHeight());
+    // Collect all player-controllable entities
+    entity_manager_->ForEach([&](const Entity& e) {
+        if (e.definition && e.definition->player_controllable) {
+            controllable_entities_.push_back(e.id);
+        }
+    });
+    active_char_index_ = 0;
+    (void)spawned;
 
-    debug_ui_ = std::make_unique<DebugUI>(window_->GetRenderer());
+    // Center camera on player
+    float cam_x = static_cast<float>(spawn_x) - cameras_[0]->GetViewWorldWidth()  / 2.0f;
+    float cam_y = static_cast<float>(spawn_y) - cameras_[0]->GetViewWorldHeight() / 2.0f;
+    cameras_[0]->SetPosition(cam_x, cam_y);
+    cameras_[0]->ClampToBounds(terrain_->GetWidth(), terrain_->GetHeight());
+
+    debug_ui_  = std::make_unique<DebugUI>(window_->GetRenderer());
     game_loop_ = std::make_unique<GameLoop>(60);
 
-    std::printf("Engine initialized: %dx%d terrain, %dx%d window\n", 
+    std::printf("Engine initialized: %dx%d terrain, %dx%d window\n",
         TERRAIN_WIDTH, TERRAIN_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT);
 }
 
@@ -91,9 +92,8 @@ void Engine::Run() {
 
 void Engine::UpdatePlayerControl(Entity& entity, double dt) {
     float walk_speed = 120.0f;
-    float jump_vel = -280.0f;
+    float jump_vel   = -280.0f;
 
-    // Read from definition properties
     if (entity.definition) {
         auto it = entity.definition->properties.find("walk_speed");
         if (it != entity.definition->properties.end()) walk_speed = it->second;
@@ -101,50 +101,47 @@ void Engine::UpdatePlayerControl(Entity& entity, double dt) {
         if (it != entity.definition->properties.end()) jump_vel = it->second;
     }
 
-    bool move_left = input_->IsKeyDown(SDL_SCANCODE_A);
-    bool move_right = input_->IsKeyDown(SDL_SCANCODE_D);
-    bool jump = input_->IsJustPressed(SDL_SCANCODE_W) || input_->IsJustPressed(SDL_SCANCODE_SPACE);
+    // MoveX is an axis action: -1 = full left, +1 = full right, intermediate for analog gamepad
+    float move_x   = input_->GetAxis(0, InputAction::MoveX);
+    bool jump      = input_->IsJustPressed(0, InputAction::Jump);
+    bool dig_down  = input_->IsPressed(0, InputAction::DigDown);
+    bool dig_horiz = input_->IsPressed(0, InputAction::DigHorizontal) && std::abs(move_x) > 0.1f;
 
-    // Horizontal movement
-    if (move_left && !move_right) {
-        entity.vel_x = Fixed::FromFloat(-walk_speed);
+    // Horizontal movement — velocity scales with analog stick for gamepad, snaps to ±1 for keyboard
+    if (move_x < 0.0f) {
+        entity.vel_x = move_x * walk_speed;
         entity.facing = -1;
         if (entity.on_ground && entity.current_action != "Jump") {
             entity.current_action = "Walk";
         }
-    } else if (move_right && !move_left) {
-        entity.vel_x = Fixed::FromFloat(walk_speed);
+    } else if (move_x > 0.0f) {
+        entity.vel_x = move_x * walk_speed;
         entity.facing = 1;
         if (entity.on_ground && entity.current_action != "Jump") {
             entity.current_action = "Walk";
         }
     } else {
-        // Apply friction when no input
         if (entity.on_ground) {
-            entity.vel_x = Fixed::Zero();
+            entity.vel_x = 0.0f;
             if (entity.current_action == "Walk") {
                 entity.current_action = "Idle";
             }
         } else {
-            // Air drag
-            entity.vel_x = Fixed::FromRaw(entity.vel_x.raw * 95 / 100);
+            entity.vel_x *= 0.95f;  // air drag
         }
     }
 
     // Jump
     if (jump && entity.on_ground) {
-        entity.vel_y = Fixed::FromFloat(jump_vel);
+        entity.vel_y = jump_vel;
         entity.on_ground = false;
         entity.current_action = "Jump";
     }
 
-    // Dig input: Q+S = dig down, C+direction = dig horizontal
-    bool dig_down = input_->IsKeyDown(SDL_SCANCODE_Q) && input_->IsKeyDown(SDL_SCANCODE_S);
-    bool dig_horiz = input_->IsKeyDown(SDL_SCANCODE_C) && (move_left || move_right);
-
+    // Dig input
     if ((dig_down || dig_horiz) && entity.on_ground && entity.current_action != "Jump") {
         entity.current_action = "Dig";
-        entity.vel_x = Fixed::Zero();
+        entity.vel_x = 0.0f;
         if (dig_down) {
             entity.dig_dir_x = 0;
             entity.dig_dir_y = 1;
@@ -159,12 +156,25 @@ void Engine::UpdatePlayerControl(Entity& entity, double dt) {
 
     // Action transitions
     if (!entity.on_ground) {
-        if (entity.vel_y > Fixed::Zero() && entity.current_action != "Fall") {
+        if (entity.vel_y > 0.0f && entity.current_action != "Fall") {
             entity.current_action = "Fall";
         }
     } else if (entity.current_action == "Fall" || entity.current_action == "Jump") {
         entity.current_action = "Idle";
     }
+
+    (void)dt;
+}
+
+void Engine::UpdateCameraFollow(Camera& cam, const Entity& target) {
+    float px = target.pos_x;
+    float py = target.pos_y;
+    float tx = px - cam.GetViewWorldWidth()  / 2.0f;
+    float ty = py - cam.GetViewWorldHeight() / 2.0f;
+    float cx = cam.GetX() + (tx - cam.GetX()) * 0.1f;
+    float cy = cam.GetY() + (ty - cam.GetY()) * 0.1f;
+    cam.SetPosition(cx, cy);
+    cam.ClampToBounds(terrain_->GetWidth(), terrain_->GetHeight());
 }
 
 void Engine::AdvanceActions(double /*dt*/) {
@@ -181,8 +191,6 @@ void Engine::AdvanceActions(double /*dt*/) {
             entity.action_frame++;
             if (entity.action_frame >= action->frames) {
                 entity.action_frame = 0;
-                // Check for length-based completion
-                // For now just loop
             }
         }
     });
@@ -190,39 +198,39 @@ void Engine::AdvanceActions(double /*dt*/) {
 
 void Engine::RenderEntities(SDL_Renderer* renderer, double alpha) {
     entity_manager_->ForEach([&](const Entity& entity) {
-        // Interpolate position
-        float x = entity.prev_pos_x.ToFloat() + (entity.pos_x.ToFloat() - entity.prev_pos_x.ToFloat()) * static_cast<float>(alpha);
-        float y = entity.prev_pos_y.ToFloat() + (entity.pos_y.ToFloat() - entity.prev_pos_y.ToFloat()) * static_cast<float>(alpha);
+        // Interpolate position between simulation ticks
+        float x = entity.prev_pos_x + (entity.pos_x - entity.prev_pos_x) * static_cast<float>(alpha);
+        float y = entity.prev_pos_y + (entity.pos_y - entity.prev_pos_y) * static_cast<float>(alpha);
 
         int sx, sy;
-        camera_->WorldToScreen(x, y, sx, sy);
+        cameras_[0]->WorldToScreen(x, y, sx, sy);
 
-        float scale = camera_->GetScale();
+        float scale = cameras_[0]->GetScale();
         SDL_Rect dst = {
             sx, sy,
-            static_cast<int>(entity.width * scale),
+            static_cast<int>(entity.width  * scale),
             static_cast<int>(entity.height * scale)
         };
 
-        // Color based on action
+        // Color based on action state
         if (entity.current_action == "Dig") {
-            SDL_SetRenderDrawColor(renderer, 220, 120, 50, 255); // orange
+            SDL_SetRenderDrawColor(renderer, 220, 120, 50, 255);  // orange
         } else if (entity.current_action == "Walk") {
             SDL_SetRenderDrawColor(renderer, 100, 200, 100, 255); // green
         } else if (entity.current_action == "Jump" || entity.current_action == "Fall") {
             SDL_SetRenderDrawColor(renderer, 100, 100, 255, 255); // blue
         } else {
-            SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255); // white/gray
+            SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255); // gray (idle)
         }
         SDL_RenderFillRect(renderer, &dst);
 
-        // Draw a direction indicator
+        // Direction indicator (eye)
         int indicator_w = static_cast<int>(3 * scale);
         int indicator_h = static_cast<int>(3 * scale);
         int indicator_x = entity.facing > 0 ?
             dst.x + dst.w - indicator_w : dst.x;
         int indicator_y = dst.y + static_cast<int>(4 * scale);
-        SDL_Rect eye = {indicator_x, indicator_y, indicator_w, indicator_h};
+        SDL_Rect eye = { indicator_x, indicator_y, indicator_w, indicator_h };
         SDL_SetRenderDrawColor(renderer, 50, 50, 50, 255);
         SDL_RenderFillRect(renderer, &eye);
     });
@@ -231,8 +239,29 @@ void Engine::RenderEntities(SDL_Renderer* renderer, double alpha) {
 void Engine::SimTick(double dt) {
     input_->PollEvents();
 
-    // Player control
-    Entity* player = entity_manager_->GetEntity(player_entity_id_);
+    // Character cycling (slot 0 keys: 1 = previous, 3 = next)
+    if (!controllable_entities_.empty()) {
+        int n = static_cast<int>(controllable_entities_.size());
+        bool prev = input_->IsJustPressed(0, InputAction::PrevCharacter);
+        bool next = input_->IsJustPressed(0, InputAction::NextCharacter);
+        if (prev) active_char_index_ = (active_char_index_ - 1 + n) % n;
+        if (next) active_char_index_ = (active_char_index_ + 1) % n;
+        if ((prev || next) && !cameras_.empty()) {
+            Entity* nc = entity_manager_->GetEntity(controllable_entities_[active_char_index_]);
+            if (nc) {
+                float sx = nc->pos_x - cameras_[0]->GetViewWorldWidth()  / 2.0f;
+                float sy = nc->pos_y - cameras_[0]->GetViewWorldHeight() / 2.0f;
+                cameras_[0]->SetPosition(sx, sy);
+                cameras_[0]->ClampToBounds(terrain_->GetWidth(), terrain_->GetHeight());
+            }
+        }
+    }
+
+    // Active player control
+    Entity* player = nullptr;
+    if (!controllable_entities_.empty()) {
+        player = entity_manager_->GetEntity(controllable_entities_[active_char_index_]);
+    }
     if (player) {
         UpdatePlayerControl(*player, dt);
     }
@@ -240,13 +269,13 @@ void Engine::SimTick(double dt) {
     // Process digging
     if (player && player->current_action == "Dig") {
         player->dig_timer++;
-        // Dig every 4 ticks (hardness affects this in the future)
         if (player->dig_timer >= 4) {
             player->dig_timer = 0;
 
-            // Dig center: offset from entity center in dig direction
-            int cx = player->pos_x.ToInt() + player->width / 2 + player->dig_dir_x * (player->width / 2 + player->dig_radius / 2);
-            int cy = player->pos_y.ToInt() + player->height / 2 + player->dig_dir_y * (player->height / 2 + player->dig_radius / 2);
+            int cx = static_cast<int>(player->pos_x) + player->width  / 2
+                     + player->dig_dir_x * (player->width  / 2 + player->dig_radius / 2);
+            int cy = static_cast<int>(player->pos_y) + player->height / 2
+                     + player->dig_dir_y * (player->height / 2 + player->dig_radius / 2);
 
             const auto* air_mat = registry_.GetMaterial("base:Air");
             if (air_mat) {
@@ -264,23 +293,14 @@ void Engine::SimTick(double dt) {
     }
 
     // Physics
-    physics_->Update(*entity_manager_, *terrain_, Fixed::FromFloat(static_cast<float>(dt)));
+    physics_->Update(*entity_manager_, *terrain_, static_cast<float>(dt));
 
     // Advance animations
     AdvanceActions(dt);
 
-    // Camera follows player
-    if (player) {
-        float px = player->pos_x.ToFloat();
-        float py = player->pos_y.ToFloat();
-        float target_x = px - camera_->GetViewWorldWidth() / 2.0f;
-        float target_y = py - camera_->GetViewWorldHeight() / 2.0f;
-
-        // Smooth follow
-        float cam_x = camera_->GetX() + (target_x - camera_->GetX()) * 0.1f;
-        float cam_y = camera_->GetY() + (target_y - camera_->GetY()) * 0.1f;
-        camera_->SetPosition(cam_x, cam_y);
-        camera_->ClampToBounds(terrain_->GetWidth(), terrain_->GetHeight());
+    // Camera follows active player
+    if (player && !cameras_.empty()) {
+        UpdateCameraFollow(*cameras_[0], *player);
     }
 
     // Terrain simulation (powder/liquid)
@@ -293,7 +313,7 @@ void Engine::SimTick(double dt) {
 
     // Debug UI update
     debug_ui_->Update(input_->GetMouseX(), input_->GetMouseY(),
-                      *camera_, *terrain_, registry_, player);
+                      *cameras_[0], *terrain_, registry_, player);
 
     entity_manager_->ProcessQueues();
 }
@@ -303,7 +323,8 @@ void Engine::Render(double alpha) {
     SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
     SDL_RenderClear(r);
 
-    terrain_renderer_->Render(r, *camera_);
+    // Future splitscreen: iterate cameras_ and set SDL viewport per camera.
+    terrain_renderer_->Render(r, *cameras_[0]);
     RenderEntities(r, alpha);
     debug_ui_->Render(r);
 

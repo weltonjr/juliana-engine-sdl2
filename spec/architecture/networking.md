@@ -29,38 +29,52 @@ The simulation is **strictly deterministic**: given the same inputs and initial 
 
 | Rule | Implementation |
 |---|---|
-| **No native floats in simulation** | Use fixed-point arithmetic for physics (positions, velocities, forces). Floats are fine for rendering/interpolation only. |
 | **Seeded PRNG** | Lua's `math.random` is replaced with a deterministic PRNG seeded from the game seed. Each entity gets its own PRNG stream to avoid order-dependent results. |
 | **Fixed tick rate** | Simulation advances in fixed steps. No delta-time variance. `dt` is always `1.0 / tick_rate`. |
 | **Deterministic iteration order** | Entity tick order is by entity ID (monotonic). Terrain simulation scans top-to-bottom, left-to-right. |
 | **No OS-dependent behavior** | No system clock, no thread-dependent ordering in simulation code. |
 | **No float in Lua simulation APIs** | Engine APIs that return positions/velocities to Lua return fixed-point values (presented as integers or scaled integers). |
 
-### Fixed-Point Format
-
-Positions and velocities use **fixed-point Q16.16** (32-bit, 16 bits integer, 16 bits fraction):
-
-- Range: -32768.0 to +32767.99998 (enough for maps up to 32768 pixels)
-- Precision: ~0.000015 per unit (sub-pixel accuracy)
-- All physics math (add, subtract, multiply) stays in fixed-point
-- Conversion to float happens only at the render layer for interpolation and drawing
 
 ## Input Abstraction
 
 The engine never reads keyboard/gamepad state directly in gameplay code. All input goes through a player→action mapping:
 
 ```
-Physical Input → InputSource → Player → Entity
+Physical Input → InputSystem (raw) → PlayerInputMap → InputManager → Engine/Entity
 ```
+
+### Current Implementation
+
+`InputManager` (`src/input/InputManager.h`) owns:
+- One `InputSystem` for raw SDL keyboard/mouse state
+- One `PlayerInputMap` per player slot (each with its own rebindable `InputBinding` per action)
+
+`InputAction` (`src/input/InputAction.h`) defines game-concept actions:
+
+| Action | Default Key(s) |
+|---|---|
+| `MoveLeft` | A |
+| `MoveRight` | D |
+| `Jump` | W or Space |
+| `DigDown` | Q + S |
+| `DigHorizontal` | C (+ movement direction) |
+| `PrevCharacter` | 1 |
+| `NextCharacter` | 3 |
+| `Quit` | Escape |
+
+`InputBinding` (`src/input/InputBinding.h`) maps an action to `primary`, optional `modifier` (combo), and optional `alt` key. Bindings can be changed at runtime via `InputManager::SetBinding(slot, action, binding)`.
+
+### Future InputSources
 
 | InputSource | Description |
 |---|---|
-| `local_keyboard` | Reads from local keyboard/gamepad (split-screen player 1) |
-| `local_gamepad` | Reads from a specific gamepad (split-screen player 2+) |
-| `network` | Reads from network input packets (remote player) |
-| `ai` | Reads from AI controller script |
+| `local_keyboard` | Current implementation — reads from `InputSystem` (SDL keyboard) |
+| `local_gamepad` | Future — reads from a specific SDL gamepad for splitscreen player 2+ |
+| `network` | Future — reads from network input packets (remote player) |
+| `ai` | Future — reads from AI controller script |
 
-Entity scripts call `IsPressed("move_right")` — the engine resolves which player owns the entity, which input source that player uses, and returns the correct value. Scripts never know or care where the input came from.
+Each future source maps its physical signals onto the same `InputAction` enum. The rest of the engine remains unchanged.
 
 ## Entity Ownership
 
@@ -193,8 +207,8 @@ Even without networking code, these systems are required from the start:
 
 | System | Reason |
 |---|---|
-| Input abstraction (player → action mapping) | Split-screen needs it. Networking reuses it. |
-| Fixed-point physics | Determinism. Cannot retrofit later without rewriting all physics. |
+| Input abstraction (player → action mapping) | **Implemented** — `InputManager` / `PlayerInputMap` / `InputAction`. Split-screen adds more slots. |
+| Fixed-point physics | **Deferred** — `FixedPoint.h` preserved; entity/physics use floats currently. Must be restored before networking. |
 | Seeded PRNG per entity | Determinism. Lua `math.random` must be replaced from day one. |
 | Fixed tick + render interpolation | Smooth rendering. Headless server capability. |
 | Terrain change batching | Clean architecture. Network diff generation comes free. |

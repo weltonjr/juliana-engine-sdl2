@@ -1,7 +1,6 @@
 #pragma once
 
 #include "core/Types.h"
-#include "core/FixedPoint.h"
 #include "package/ObjectDef.h"
 #include <string>
 
@@ -9,12 +8,12 @@ struct Entity {
     EntityID id = 0;
     const ObjectDef* definition = nullptr;
 
-    // Position & velocity (fixed-point for determinism)
-    Fixed pos_x, pos_y;
-    Fixed vel_x, vel_y;
+    // Position & velocity (float; FixedPoint.h preserved for future network determinism)
+    float pos_x = 0.0f, pos_y = 0.0f;
+    float vel_x = 0.0f, vel_y = 0.0f;
 
     // Previous position (for render interpolation)
-    Fixed prev_pos_x, prev_pos_y;
+    float prev_pos_x = 0.0f, prev_pos_y = 0.0f;
 
     // Physics
     int width = 12;

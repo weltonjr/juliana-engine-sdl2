@@ -12,6 +12,7 @@ id = "Character"                      # unique within the package
 name = "Adventurer"                   # display name
 category = ["Living", "Controllable"] # category tags (strings, not bitflags)
 aspects = ["Combat", "Inventory", "Mage"]   # referenced aspects (public or private inline)
+player_controllable = false           # if true, spawned instances receive player input and camera focus
 
 [physics]
 mode = "dynamic"           # "dynamic" (moves), "static" (fixed), "kinematic" (script-driven)
@@ -45,6 +46,14 @@ walk_speed = 120.0
 jump_velocity = -280.0
 dig_radius = 6
 ```
+
+### player_controllable
+
+When `player_controllable = true` in the `[object]` block, the engine adds all spawned instances of this object to its internal `controllable_entities_` list. The active entity in that list receives player input (via `InputManager`) and is followed by the camera.
+
+Players cycle through controllable entities with the `PrevCharacter` / `NextCharacter` actions (default keys: `1` / `3`). The camera snaps immediately on switch and then resumes smooth following.
+
+Objects without `player_controllable = true` (the default) are never added to the list — they are driven by AI, scripts, or physics only.
 
 ## Entity Lifecycle
 

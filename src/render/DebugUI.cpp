@@ -80,8 +80,8 @@ void DebugUI::Update(int mouse_x, int mouse_y, const Camera& camera,
     if (player) {
         char buf[128];
         std::snprintf(buf, sizeof(buf), "pos: %.1f, %.1f  vel: %.1f, %.1f  ground: %s",
-            player->pos_x.ToFloat(), player->pos_y.ToFloat(),
-            player->vel_x.ToFloat(), player->vel_y.ToFloat(),
+            player->pos_x, player->pos_y,
+            player->vel_x, player->vel_y,
             player->on_ground ? "yes" : "no");
         player_info_ = buf;
         action_info_ = "action: " + player->current_action;

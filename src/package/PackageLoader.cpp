@@ -195,6 +195,7 @@ void PackageLoader::ParseObject(const std::string& file_path, const std::string&
             def->aspects.push_back(asp.value_or<std::string>(""));
         }
     }
+    def->player_controllable = obj["player_controllable"].value_or(false);
 
     // Physics
     if (tbl.contains("physics")) {

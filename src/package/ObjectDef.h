@@ -1,7 +1,6 @@
 #pragma once
 
 #include "core/Types.h"
-#include "core/FixedPoint.h"
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -18,6 +17,7 @@ struct ObjectDef {
     std::string qualified_id;
     std::vector<std::string> categories;
     std::vector<std::string> aspects;
+    bool player_controllable = false;  // if true, player input is routed to instances of this object
 
     // Physics
     PhysicsMode physics_mode = PhysicsMode::Dynamic;
