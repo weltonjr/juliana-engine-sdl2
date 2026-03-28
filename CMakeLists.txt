@@ -7,6 +7,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew" "/usr/local")
 list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/lib/cmake/SDL2" "/opt/homebrew/lib/cmake/SDL2_ttf")
+# Windows/MSYS2 ucrt64
+list(APPEND CMAKE_PREFIX_PATH "C:/msys64/ucrt64")
 
 # --- System dependencies ---
 find_package(SDL2 REQUIRED)
@@ -30,7 +32,7 @@ FetchContent_MakeAvailable(tomlplusplus json)
 # --- Engine executable ---
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 add_executable(${PROJECT_NAME} ${SOURCES})
-target_include_directories(${PROJECT_NAME} PRIVATE src /opt/homebrew/include /usr/local/include)
+target_include_directories(${PROJECT_NAME} PRIVATE src /opt/homebrew/include /usr/local/include "C:/msys64/ucrt64/include")
 target_link_libraries(${PROJECT_NAME} PRIVATE
     SDL2::SDL2
     SDL2_ttf::SDL2_ttf
