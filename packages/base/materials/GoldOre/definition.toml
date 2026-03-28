@@ -16,6 +16,5 @@ color_variation = 10
 gravity = false
 flammable = false
 blast_resistance = 60
-dig_product = "base:GoldChunk"
-small_fragment = "base:GoldDust"
+small_fragment = "base:GoldChunk"
 min_fragment_pixels = 8

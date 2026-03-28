@@ -366,35 +366,6 @@ std::vector<SpawnPosition> MapGenerator::FindSpawnPositions(
     return positions;
 }
 
-// ---- Main generation entry points ----
-
-Terrain MapGenerator::GenerateFlat(int width, int height, uint32_t seed, const DefinitionRegistry& registry) {
-    // Legacy entry point — create a default scenario config
-    ScenarioDef scenario;
-    scenario.map.width = width;
-    scenario.map.height = height;
-    scenario.map.seed = seed;
-    scenario.map.shape = "flat";
-    scenario.map.shape_params.params["surface_level"] = 0.35f;
-    scenario.map.shape_params.params["roughness"] = 0.5f;
-
-    scenario.map.materials = {
-        {"base:Air", "above_surface", "", 0, 0},
-        {"base:Dirt", "surface_layer", "base:DirtWall", 30, 0},
-        {"base:Rock", "deep", "base:RockWall", 0, 40},
-        {"base:Dirt", "fill", "base:DirtWall", 0, 0}
-    };
-
-    scenario.map.features = {
-        {"caves", "", "underground", 0.05f, 0, 8, 15, 0},
-        {"ore_veins", "base:GoldOre", "rock", 0.03f, 0, 0, 0, 6},
-        {"ore_veins", "base:CoalOre", "rock", 0.02f, 0, 0, 0, 5},
-        {"lakes", "", "surface", 0.0f, 2, 40, 80, 0}
-    };
-
-    return GenerateFromScenario(scenario, registry);
-}
-
 Terrain MapGenerator::GenerateFromScenario(const ScenarioDef& scenario, const DefinitionRegistry& registry) {
     int w = scenario.map.width;
     int h = scenario.map.height;

@@ -16,4 +16,4 @@ color_variation = 8
 gravity = false
 flammable = false
 blast_resistance = 80
-dig_product = "base:Stone"
+small_fragment = "base:Rock"

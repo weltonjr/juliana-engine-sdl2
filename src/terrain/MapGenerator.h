@@ -13,10 +13,6 @@ struct SpawnPosition {
 
 class MapGenerator {
 public:
-    // Legacy simple generation
-    static Terrain GenerateFlat(int width, int height, uint32_t seed, const DefinitionRegistry& registry);
-
-    // Scenario-driven generation
     static Terrain GenerateFromScenario(const ScenarioDef& scenario, const DefinitionRegistry& registry);
 
     // Find spawn positions for player slots

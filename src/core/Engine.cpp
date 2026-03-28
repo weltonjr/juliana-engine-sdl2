@@ -41,16 +41,9 @@ void Engine::Init() {
 
     // Load and generate from scenario (try GoldRush first)
     auto scenario = ScenarioLoader::LoadFromFile("packages/base/scenarios/GoldRush/scenario.json");
-    if (scenario) {
-        terrain_ = std::make_unique<Terrain>(
-            MapGenerator::GenerateFromScenario(*scenario, registry_)
-        );
-    } else {
-        // Fallback to legacy generation
-        terrain_ = std::make_unique<Terrain>(
-            MapGenerator::GenerateFlat(TERRAIN_WIDTH, TERRAIN_HEIGHT, 42, registry_)
-        );
-    }
+    terrain_ = std::make_unique<Terrain>(
+        MapGenerator::GenerateFromScenario(*scenario, registry_)
+    );
 
     terrain_renderer_ = std::make_unique<TerrainRenderer>(
         window_->GetRenderer(), *terrain_, &registry_
@@ -62,7 +55,7 @@ void Engine::Init() {
     physics_ = std::make_unique<PhysicsSystem>(registry_);
     terrain_sim_ = std::make_unique<TerrainSimulator>(registry_);
 
-    // Find spawn position
+    // Find spawn position (todo: temporary, need to be voved to a system resposible for creating objects on the map, and pass the scenario start objects)
     int spawn_x, spawn_y;
     if (scenario && !scenario->players.empty()) {
         auto positions = MapGenerator::FindSpawnPositions(*terrain_, registry_, scenario->players);
@@ -74,12 +67,12 @@ void Engine::Init() {
     }
 
     player_entity_id_ = entity_manager_->Spawn(
-        "base:Character",
+        "base:Character", //todo: need to pull the type from the scenario
         Fixed::FromInt(spawn_x),
         Fixed::FromInt(spawn_y)
     );
 
-    // Center camera on player
+    // Center camera on player (todo: implement active player controll, so it works on splitscreen and web, and also implement the character switch, so there is no need to a fixed pos, we just run the switch)
     float cam_x = static_cast<float>(spawn_x) - camera_->GetViewWorldWidth() / 2.0f;
     float cam_y = static_cast<float>(spawn_y) - camera_->GetViewWorldHeight() / 2.0f;
     camera_->SetPosition(cam_x, cam_y);
@@ -88,7 +81,7 @@ void Engine::Init() {
     debug_ui_ = std::make_unique<DebugUI>(window_->GetRenderer());
     game_loop_ = std::make_unique<GameLoop>(60);
 
-    std::printf("Engine initialized: %dx%d terrain, %dx%d window\n",
+    std::printf("Engine initialized: %dx%d terrain, %dx%d window\n", //todo: 
         TERRAIN_WIDTH, TERRAIN_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT);
 }
 

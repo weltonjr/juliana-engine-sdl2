@@ -16,4 +16,4 @@ color_variation = 12
 gravity = true
 flammable = false
 blast_resistance = 5
-dig_product = "base:SandObj"
+dig_product = "base:Sand"
