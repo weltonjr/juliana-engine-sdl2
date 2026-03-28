@@ -41,3 +41,18 @@ src/
 - SDL2
 - CMake 3.14+
 Lets fix some things:
+Lets fix some things:
+
+* Change InputSystem to work with game concepts, like moveLeft, moveRight, Click possition, that will handle diferent input sources, like, keyboard, mouse, gamepad, touch, and  also deal with key rebinding, lets also create a input manager in a way that the splitscreen player will have its own system(with the diferent mappings)
+
+* Change the camera logic to handle splitscreen players, do not implement splitscreen now, just make the camera logic in a way that works for more than one player and will follow the correct player
+
+* Also add a active character logic, and change character buttons (use `1` previous and `3` next), the camera and controls will be target to the choosen char
+
+* Lets also include something on the character object definition  to indicate that it can be controlled by the player
+
+* 
+
+* Remove the Fixed from the code, let go with normal floats
+
+* Update the documentation accordingly
