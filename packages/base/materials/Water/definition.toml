@@ -1,0 +1,19 @@
+[material]
+id = "Water"
+name = "Water"
+
+[physics]
+state = "liquid"
+density = 50
+friction = 0.2
+hardness = 0
+
+[visual]
+color = [60, 100, 200]
+transparency = 0.5
+color_variation = 5
+
+[behavior]
+gravity = true
+flow_rate = 3
+liquid_drag = 0.85

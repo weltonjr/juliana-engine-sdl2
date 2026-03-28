@@ -1,0 +1,19 @@
+[material]
+id = "Rock"
+name = "Rock"
+
+[physics]
+state = "solid"
+density = 200
+friction = 0.9
+hardness = 80
+
+[visual]
+color = [128, 128, 128]
+color_variation = 8
+
+[behavior]
+gravity = false
+flammable = false
+blast_resistance = 80
+small_fragment = "base:Rock"

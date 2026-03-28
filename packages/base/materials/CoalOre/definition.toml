@@ -1,0 +1,19 @@
+[material]
+id = "CoalOre"
+name = "Coal Ore"
+
+[physics]
+state = "solid"
+density = 120
+friction = 0.8
+hardness = 40
+
+[visual]
+color = [50, 45, 40]
+color_variation = 8
+
+[behavior]
+gravity = false
+flammable = true
+blast_resistance = 30
+dig_product = "base:Coal"

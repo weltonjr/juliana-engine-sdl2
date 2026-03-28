@@ -1,0 +1,7 @@
+[background]
+id = "DirtWall"
+name = "Dirt Wall"
+
+[visual]
+color = [90, 75, 60]
+color_variation = 6

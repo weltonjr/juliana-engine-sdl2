@@ -1,0 +1,5 @@
+[procedure]
+id = "hangle"
+name = "Hangle"
+description = "Ceiling attachment, horizontal movement"
+engine_impl = "hangle"

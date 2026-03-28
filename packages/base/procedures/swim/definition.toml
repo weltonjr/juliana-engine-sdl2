@@ -1,0 +1,5 @@
+[procedure]
+id = "swim"
+name = "Swim"
+description = "2D directional input, buoyancy, water drag"
+engine_impl = "swim"

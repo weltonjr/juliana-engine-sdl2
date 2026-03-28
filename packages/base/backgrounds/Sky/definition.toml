@@ -1,0 +1,7 @@
+[background]
+id = "Sky"
+name = "Open Sky"
+
+[visual]
+color = [0, 0, 0]
+transparent = true

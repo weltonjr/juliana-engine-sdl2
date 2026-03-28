@@ -1,0 +1,37 @@
+[object]
+id = "Character"
+name = "Adventurer"
+category = ["Living", "Controllable"]
+aspects = []
+player_controllable = true
+
+[physics]
+mode = "dynamic"
+mass = 50
+max_fall_speed = 400.0
+size = [12, 20]
+rotation = false
+solid = false
+overlap_detection = true
+step_up = 4
+
+[points]
+torso = [6, 10]
+head = [6, 4]
+hand_r = [10, 12]
+hand_l = [2, 12]
+foot_l = [4, 20]
+foot_r = [8, 20]
+
+[container]
+enabled = true
+max_slots = 8
+filter = ["Object", "Tool", "Material"]
+
+[properties]
+hp = 100
+walk_speed = 120.0
+jump_velocity = -280.0
+dig_radius = 6
+fall_damage_threshold = 300
+fall_damage_scale = 0.5

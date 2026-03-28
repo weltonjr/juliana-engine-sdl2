@@ -1,0 +1,36 @@
+[actions.Idle]
+row = 0
+frames = 1
+delay = 1
+next = "Idle"
+length = 0
+procedure = "none"
+
+[actions.Walk]
+row = 1
+frames = 8
+delay = 3
+next = "Walk"
+procedure = "walk"
+
+[actions.Jump]
+row = 2
+frames = 4
+delay = 2
+next = "Fall"
+procedure = "flight"
+
+[actions.Fall]
+row = 3
+frames = 2
+delay = 4
+next = "Fall"
+procedure = "flight"
+
+[actions.Dig]
+row = 4
+frames = 6
+delay = 4
+next = "Idle"
+length = 24
+procedure = "dig"

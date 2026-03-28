@@ -1,0 +1,7 @@
+[background]
+id = "RockWall"
+name = "Rock Wall"
+
+[visual]
+color = [80, 80, 85]
+color_variation = 5

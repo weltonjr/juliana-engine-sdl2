@@ -35,6 +35,20 @@ src/
   input/     # Input polling and action mapping
 ```
 
+## Controls
+
+| Key | Action |
+|-----|--------|
+| A / D | Move left / right |
+| W or Space | Jump |
+| Q + S | Dig downward |
+| C + A/D | Dig horizontally |
+| 1 | Switch to previous controllable character |
+| 3 | Switch to next controllable character |
+| Escape | Quit |
+
+Input bindings are action-based (`InputAction`) and can be rebound at runtime via `InputManager::SetBinding(slot, action, binding)`.
+
 ## Tech Stack
 
 - C++17
