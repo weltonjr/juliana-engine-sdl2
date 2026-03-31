@@ -115,6 +115,7 @@ void PackageLoader::ParseMaterial(const std::string& file_path, const std::strin
         def->flow_rate = beh["flow_rate"].value_or(0);
         def->liquid_drag = beh["liquid_drag"].value_or(0.0f);
         def->dig_product = beh["dig_product"].value_or<std::string>("");
+        def->dig_pixels_to_spawn = beh["dig_pixels_to_spawn"].value_or(50.0f);
         def->small_fragment = beh["small_fragment"].value_or<std::string>("");
         def->min_fragment_pixels = beh["min_fragment_pixels"].value_or(8);
     }
@@ -241,6 +242,17 @@ void PackageLoader::ParseObject(const std::string& file_path, const std::string&
             for (auto& f : *filt) {
                 def->container_filter.push_back(f.value_or<std::string>(""));
             }
+        }
+    }
+
+    // Visual
+    if (tbl.contains("visual")) {
+        auto& vis = *tbl["visual"].as_table();
+        if (auto c = vis["color"].as_array(); c && c->size() >= 3) {
+            def->color.r = static_cast<uint8_t>((*c)[0].value_or(200));
+            def->color.g = static_cast<uint8_t>((*c)[1].value_or(200));
+            def->color.b = static_cast<uint8_t>((*c)[2].value_or(200));
+            def->color.a = 255;
         }
     }
 

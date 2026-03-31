@@ -3,6 +3,7 @@
 #include "core/Types.h"
 #include "package/ObjectDef.h"
 #include <string>
+#include <unordered_map>
 
 struct Entity {
     EntityID id = 0;
@@ -36,8 +37,13 @@ struct Entity {
     // Dig state
     int dig_dir_x = 0;  // -1, 0, 1
     int dig_dir_y = 0;  // -1, 0, 1
-    int dig_timer = 0;
-    int dig_radius = 12;
+    float dig_progress = 0.0f;        // fractional pixel accumulator
+    int dig_size_w = 12;              // dig area width (defaults to character width)
+    int dig_size_h = 20;              // dig area height (defaults to character height)
+    float dig_speed = 5.0f;           // pixels per second
+
+    // Per-material dig progress: tracks pixels dug per material for spawn intervals
+    std::unordered_map<MaterialID, float> dig_material_progress;
 
     // Owner player slot (0 = unowned)
     uint32_t owner_slot = 0;

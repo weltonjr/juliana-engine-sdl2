@@ -17,3 +17,4 @@ gravity = false
 flammable = false
 blast_resistance = 20
 dig_product = "base:Earth"
+dig_pixels_to_spawn = 50.0

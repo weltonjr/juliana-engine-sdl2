@@ -43,6 +43,21 @@ int Terrain::DigCircle(int cx, int cy, int radius, MaterialID air_id) {
     return count;
 }
 
+int Terrain::DigRect(int x, int y, int w, int h, MaterialID air_id) {
+    int count = 0;
+    for (int py = y; py < y + h; py++) {
+        for (int px = x; px < x + w; px++) {
+            if (!InBounds(px, py)) continue;
+            Cell cell = GetCell(px, py);
+            if (cell.material_id != air_id) {
+                SetMaterial(px, py, air_id);
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
 bool Terrain::InBounds(int x, int y) const {
     return x >= 0 && x < width_ && y >= 0 && y < height_;
 }

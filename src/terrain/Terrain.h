@@ -21,6 +21,9 @@ public:
     // Dig a circular area — returns number of cells removed
     int DigCircle(int cx, int cy, int radius, MaterialID air_id);
 
+    // Dig a rectangular area — returns number of cells removed
+    int DigRect(int x, int y, int w, int h, MaterialID air_id);
+
     int GetWidth() const { return width_; }
     int GetHeight() const { return height_; }
 

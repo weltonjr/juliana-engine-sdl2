@@ -34,6 +34,7 @@ struct MaterialDef {
     int flow_rate = 0;
     float liquid_drag = 0.0f;
     std::string dig_product;
+    float dig_pixels_to_spawn = 50.0f;  // pixels dug before spawning dig_product
     std::string small_fragment;
     int min_fragment_pixels = 8;
 

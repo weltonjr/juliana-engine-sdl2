@@ -29,6 +29,16 @@ EntityID EntityManager::Spawn(const std::string& def_id, float x, float y) {
     entity.step_up = def->step_up;
     entity.solid = def->solid;
 
+    // Dig properties from definition (defaults to character size)
+    {
+        auto it = def->properties.find("dig_size_w");
+        entity.dig_size_w = (it != def->properties.end()) ? static_cast<int>(it->second) : def->size_w;
+        it = def->properties.find("dig_size_h");
+        entity.dig_size_h = (it != def->properties.end()) ? static_cast<int>(it->second) : def->size_h;
+        it = def->properties.find("dig_speed");
+        if (it != def->properties.end()) entity.dig_speed = it->second;
+    }
+
     entities_[id] = entity;
     RebuildSortedIDs();
 

@@ -1,0 +1,19 @@
+[object]
+id = "SandBucket"
+name = "Sand Bucket"
+category = ["Object", "Material"]
+
+[physics]
+mode = "dynamic"
+mass = 8
+max_fall_speed = 200.0
+size = [5, 5]
+solid = false
+overlap_detection = true
+
+[visual]
+color = [210, 190, 140]
+
+[properties]
+stackable = 1
+max_stack = 99

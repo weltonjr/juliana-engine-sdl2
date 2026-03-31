@@ -17,3 +17,4 @@ gravity = false
 flammable = true
 blast_resistance = 30
 dig_product = "base:Coal"
+dig_pixels_to_spawn = 30.0

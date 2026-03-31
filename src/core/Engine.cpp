@@ -138,20 +138,37 @@ void Engine::UpdatePlayerControl(Entity& entity, double dt) {
         entity.current_action = "Jump";
     }
 
-    // Dig input
-    if ((dig_down || dig_horiz) && entity.on_ground && entity.current_action != "Jump") {
-        entity.current_action = "Dig";
-        entity.vel_x = 0.0f;
+    // Dig input — continuous while axis held, stops on release or direction reversal
+    if (entity.on_ground && entity.current_action != "Jump") {
         if (dig_down) {
-            entity.dig_dir_x = 0;
-            entity.dig_dir_y = 1;
-        } else {
-            entity.dig_dir_x = entity.facing;
-            entity.dig_dir_y = 0;
+            if (entity.current_action != "Dig" || entity.dig_dir_y != 1) {
+                // Start or switch to digging down
+                entity.current_action = "Dig";
+                entity.vel_x = 0.0f;
+                entity.dig_dir_x = 0;
+                entity.dig_dir_y = 1;
+                entity.dig_progress = 0.0f;
+                entity.dig_material_progress.clear();
+            }
+            entity.vel_x = 0.0f;
+        } else if (dig_horiz) {
+            int new_dir = (move_x > 0.0f) ? 1 : -1;
+            if (entity.current_action != "Dig" || entity.dig_dir_x != new_dir || entity.dig_dir_y != 0) {
+                // Start or switch to horizontal dig (direction changed = reset)
+                entity.current_action = "Dig";
+                entity.vel_x = 0.0f;
+                entity.dig_dir_x = new_dir;
+                entity.dig_dir_y = 0;
+                entity.dig_progress = 0.0f;
+                entity.dig_material_progress.clear();
+            }
+            entity.vel_x = 0.0f;
+        } else if (entity.current_action == "Dig") {
+            // Axis released — stop digging
+            entity.current_action = "Idle";
+            entity.dig_progress = 0.0f;
+            entity.dig_material_progress.clear();
         }
-    } else if (entity.current_action == "Dig" && !dig_down && !dig_horiz) {
-        entity.current_action = "Idle";
-        entity.dig_timer = 0;
     }
 
     // Action transitions
@@ -212,15 +229,25 @@ void Engine::RenderEntities(SDL_Renderer* renderer, double alpha) {
             static_cast<int>(entity.height * scale)
         };
 
-        // Color based on action state
-        if (entity.current_action == "Dig") {
-            SDL_SetRenderDrawColor(renderer, 220, 120, 50, 255);  // orange
-        } else if (entity.current_action == "Walk") {
-            SDL_SetRenderDrawColor(renderer, 100, 200, 100, 255); // green
-        } else if (entity.current_action == "Jump" || entity.current_action == "Fall") {
-            SDL_SetRenderDrawColor(renderer, 100, 100, 255, 255); // blue
+        // Color: player-controllable entities use action-based colors,
+        // other objects use their definition color
+        if (entity.definition && entity.definition->player_controllable) {
+            if (entity.current_action == "Dig") {
+                SDL_SetRenderDrawColor(renderer, 220, 120, 50, 255);  // orange
+            } else if (entity.current_action == "Walk") {
+                SDL_SetRenderDrawColor(renderer, 100, 200, 100, 255); // green
+            } else if (entity.current_action == "Jump" || entity.current_action == "Fall") {
+                SDL_SetRenderDrawColor(renderer, 100, 100, 255, 255); // blue
+            } else {
+                SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255); // gray (idle)
+            }
+        } else if (entity.definition) {
+            SDL_SetRenderDrawColor(renderer,
+                entity.definition->color.r,
+                entity.definition->color.g,
+                entity.definition->color.b, 255);
         } else {
-            SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255); // gray (idle)
+            SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
         }
         SDL_RenderFillRect(renderer, &dst);
 
@@ -266,28 +293,72 @@ void Engine::SimTick(double dt) {
         UpdatePlayerControl(*player, dt);
     }
 
-    // Process digging
+    // Process digging — progressive rect dig at dig_speed px/s
     if (player && player->current_action == "Dig") {
-        player->dig_timer++;
-        if (player->dig_timer >= 4) {
-            player->dig_timer = 0;
+        const auto* air_mat = registry_.GetMaterial("base:Air");
+        if (air_mat) {
+            player->dig_progress += player->dig_speed * static_cast<float>(dt);
 
-            int cx = static_cast<int>(player->pos_x) + player->width  / 2
-                     + player->dig_dir_x * (player->width  / 2 + player->dig_radius / 2);
-            int cy = static_cast<int>(player->pos_y) + player->height / 2
-                     + player->dig_dir_y * (player->height / 2 + player->dig_radius / 2);
+            // Process each whole pixel of progress
+            while (player->dig_progress >= 1.0f) {
+                player->dig_progress -= 1.0f;
 
-            const auto* air_mat = registry_.GetMaterial("base:Air");
-            if (air_mat) {
-                int dug = terrain_->DigCircle(cx, cy, player->dig_radius, air_mat->runtime_id);
-                if (dug > 0) {
-                    int drx = cx - player->dig_radius - 1;
-                    int dry = cy - player->dig_radius - 1;
-                    int drw = player->dig_radius * 2 + 3;
-                    int drh = player->dig_radius * 2 + 3;
-                    terrain_renderer_->UpdateRegion(drx, dry, drw, drh);
-                    terrain_sim_->NotifyModified(drx, dry, drw, drh);
+                int dw = player->dig_size_w;
+                int dh = player->dig_size_h;
+                int px = static_cast<int>(player->pos_x);
+                int py = static_cast<int>(player->pos_y);
+
+                int rx, ry, rw, rh;
+                if (player->dig_dir_y == 1) {
+                    // Digging down: dig a 1-pixel-tall row at the bottom edge
+                    rx = px;
+                    ry = py + dh;
+                    rw = dw;
+                    rh = 1;
+                } else {
+                    // Digging horizontally: dig a 1-pixel-wide column at the front edge
+                    rx = (player->dig_dir_x > 0) ? px + dw : px - 1;
+                    ry = py;
+                    rw = 1;
+                    rh = dh;
                 }
+
+                // Sample materials in the dig strip before clearing them
+                for (int sy = ry; sy < ry + rh; sy++) {
+                    for (int sx = rx; sx < rx + rw; sx++) {
+                        if (!terrain_->InBounds(sx, sy)) continue;
+                        Cell cell = terrain_->GetCell(sx, sy);
+                        if (cell.material_id == air_mat->runtime_id) continue;
+
+                        // Accumulate progress for this material
+                        player->dig_material_progress[cell.material_id] += 1.0f;
+
+                        // Check if we crossed a spawn threshold for this material
+                        const auto* mat_def = registry_.GetMaterialByRuntimeID(cell.material_id);
+                        if (mat_def && !mat_def->dig_product.empty()) {
+                            float interval = mat_def->dig_pixels_to_spawn;
+                            float& progress = player->dig_material_progress[cell.material_id];
+                            if (progress >= interval) {
+                                progress -= interval;
+                                // Spawn dig product behind the player
+                                float spawn_x = player->pos_x - player->dig_dir_x * static_cast<float>(dw);
+                                float spawn_y = player->pos_y - player->dig_dir_y * static_cast<float>(dh);
+                                entity_manager_->Spawn(mat_def->dig_product, spawn_x, spawn_y);
+                            }
+                        }
+                    }
+                }
+
+                // Clear the dig strip
+                int dug = terrain_->DigRect(rx, ry, rw, rh, air_mat->runtime_id);
+                if (dug > 0) {
+                    terrain_renderer_->UpdateRegion(rx - 1, ry - 1, rw + 2, rh + 2);
+                    terrain_sim_->NotifyModified(rx - 1, ry - 1, rw + 2, rh + 2);
+                }
+
+                // Move player along with the dig
+                player->pos_x += player->dig_dir_x * 1.0f;
+                player->pos_y += player->dig_dir_y * 1.0f;
             }
         }
     }
