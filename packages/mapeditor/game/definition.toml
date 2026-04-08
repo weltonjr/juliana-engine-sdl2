@@ -1,4 +1,20 @@
 [game]
-id = "mapeditor"
-name = "Map Editor"
+id      = "mapeditor"
+name    = "Map Editor"
 version = "0.1.0"
+
+[window]
+width  = 1280
+height = 720
+
+[ui]
+skin      = "ui/skin.toml"
+# font    = "ui/font.ttf"   # optional; falls back to system fonts when absent
+font_size = 14
+
+[startup]
+script = "scripts/main.lua"
+
+# Content packages loaded when a map is open (none needed for the menu)
+# [packages]
+# load = []

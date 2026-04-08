@@ -1,0 +1,38 @@
+#pragma once
+#include <string>
+#include <vector>
+#include <memory>
+#include <functional>
+
+enum class UIElementType { Frame, Button, Label, Image };
+
+// A single UI element. Elements form a tree: Frames can contain any children.
+// Positions are relative to the parent element (or screen origin for root elements).
+// abs_x / abs_y are computed by UISystem before each render pass.
+struct UIElement {
+    UIElementType type = UIElementType::Frame;
+    std::string   id;
+
+    // Layout (relative to parent)
+    int  x = 0, y = 0, w = 0, h = 0;
+    bool visible = true;
+
+    // Content (used by Button and Label)
+    std::string text;
+
+    // Button interaction
+    std::function<void()> on_click;
+    bool hovered = false;
+    bool pressed  = false;
+
+    // Children (Frames can hold any element type)
+    std::vector<std::shared_ptr<UIElement>> children;
+
+    // Computed absolute position (filled by UISystem::ComputeAbsPositions)
+    int abs_x = 0, abs_y = 0;
+
+    // --- Factory helpers (add a child and return it) ---
+    std::shared_ptr<UIElement> AddFrame (int x, int y, int w, int h);
+    std::shared_ptr<UIElement> AddButton(const std::string& text, int x, int y, int w, int h);
+    std::shared_ptr<UIElement> AddLabel (const std::string& text, int x, int y);
+};

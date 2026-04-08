@@ -2,19 +2,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug Aeterium",
+            "name": "Debug game",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/build/aeterium",
+            "program": "${workspaceFolder}/build/juliana",
             "args": [],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "cmake-build-debug"
         },
         {
-            "name": "Run Aeterium (no debug)",
+            "name": "Run game (no debug)",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/build/aeterium",
+            "program": "${workspaceFolder}/build/juliana",
             "args": [],
             "cwd": "${workspaceFolder}",
             "noDebug": true

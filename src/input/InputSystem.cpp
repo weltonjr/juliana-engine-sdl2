@@ -6,8 +6,9 @@ InputSystem::InputSystem() {
 }
 
 void InputSystem::PollEvents() {
-    // Copy current to previous
+    // Snapshot previous frame state
     std::memcpy(previous_keys_, current_keys_, sizeof(current_keys_));
+    previous_mouse_ = current_mouse_;
 
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -19,14 +20,28 @@ void InputSystem::PollEvents() {
         }
     }
 
-    // Mouse position
-    SDL_GetMouseState(&mouse_x_, &mouse_y_);
+    // Mouse position + button mask
+    current_mouse_ = SDL_GetMouseState(&mouse_x_, &mouse_y_);
 
     // Snapshot current keyboard state
     int num_keys = 0;
     const uint8_t* state = SDL_GetKeyboardState(&num_keys);
     int copy_count = num_keys < MAX_KEYS ? num_keys : MAX_KEYS;
     std::memcpy(current_keys_, state, copy_count);
+}
+
+bool InputSystem::IsMouseDown(int button) const {
+    return (current_mouse_ & SDL_BUTTON(button)) != 0;
+}
+
+bool InputSystem::IsMouseJustPressed(int button) const {
+    uint32_t mask = SDL_BUTTON(button);
+    return (current_mouse_ & mask) && !(previous_mouse_ & mask);
+}
+
+bool InputSystem::IsMouseJustReleased(int button) const {
+    uint32_t mask = SDL_BUTTON(button);
+    return !(current_mouse_ & mask) && (previous_mouse_ & mask);
 }
 
 bool InputSystem::IsKeyDown(SDL_Scancode key) const {

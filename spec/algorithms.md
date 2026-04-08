@@ -1,6 +1,6 @@
-# Aeterium -- Algorithms Reference
+# Algorithms Reference
 
-This document describes the core algorithms used in the Aeterium engine. Each section
+This document describes the core algorithms used in the Juliana engine. Each section
 includes pseudocode and complexity analysis. Implementations live in the `src/` tree;
 this file is the canonical reference for *how* and *why* each algorithm works.
 

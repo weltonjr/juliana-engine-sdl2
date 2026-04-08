@@ -1,4 +1,4 @@
-# Aeterium
+# Juliana Engine
 
 A spiritual clone of Clonk Endeavor — a 2D sandbox game featuring physics-based terrain digging, ore fragmentation, and base building. Built with C++17 and SDL2.
 
@@ -20,7 +20,7 @@ cmake --build build --parallel
 ## Run
 
 ```sh
-./build/aeterium
+./build/juliana
 ```
 
 ## Project Structure

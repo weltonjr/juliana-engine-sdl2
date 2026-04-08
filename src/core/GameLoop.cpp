@@ -31,9 +31,7 @@ void GameLoop::Run(Engine& engine) {
         fps_timer += frame_time;
         frame_count++;
         if (fps_timer >= 1.0) {
-            char title[64];
-            std::snprintf(title, sizeof(title), "Aeterium [FPS: %d]", frame_count);
-            engine.SetWindowTitle(title);
+            // TODO: show FPS on top right of screen
             frame_count = 0;
             fps_timer -= 1.0;
         }

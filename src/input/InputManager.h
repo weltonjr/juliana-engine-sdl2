@@ -29,6 +29,11 @@ public:
     int  GetMouseX() const;
     int  GetMouseY() const;
 
+    // Mouse button queries (SDL_BUTTON_LEFT = 1 by default)
+    bool IsMouseDown        (int button = SDL_BUTTON_LEFT) const;
+    bool IsMouseJustPressed (int button = SDL_BUTTON_LEFT) const;
+    bool IsMouseJustReleased(int button = SDL_BUTTON_LEFT) const;
+
     // Replace the full binding for an action at runtime (key rebinding / gamepad setup).
     void SetBinding(int slot, InputAction action, ActionBinding binding);
 

@@ -1,4 +1,4 @@
-# Aeterium — Gameplay Specification
+# Aetherium — Gameplay Specification
 
 ## Vision
 
