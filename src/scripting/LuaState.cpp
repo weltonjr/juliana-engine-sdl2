@@ -3,6 +3,7 @@
 
 #include "scripting/LuaState.h"
 #include "core/Engine.h"
+#include "core/EngineLog.h"
 #include "ui/UISystem.h"
 #include "ui/UIElement.h"
 #include "ui/UIScreen.h"
@@ -64,11 +65,19 @@ void LuaState::BindAPI() {
 
     // ── UIElement ──────────────────────────────────────────────────────────────
     // Exposed as a shared_ptr usertype so Lua can hold references to child elements.
+    // Note: member variable pointers (&Type::field) trigger a sol2 v3.3.0 bug on
+    // clang/Lua-5.4 — use sol::property lambdas instead.
     lua.new_usertype<UIElement>("UIElement",
         sol::no_constructor,
-        "id",      &UIElement::id,
-        "visible", &UIElement::visible,
-        "text",    &UIElement::text,
+        "id",      sol::property(
+            [](const UIElement& el) { return el.id; },
+            [](UIElement& el, const std::string& v) { el.id = v; }),
+        "visible", sol::property(
+            [](const UIElement& el) { return el.visible; },
+            [](UIElement& el, bool v) { el.visible = v; }),
+        "text",    sol::property(
+            [](const UIElement& el) { return el.text; },
+            [](UIElement& el, const std::string& v) { el.text = v; }),
 
         // Register a Lua function as the click handler
         "on_click", [](UIElement& el, sol::function fn) {
@@ -84,7 +93,9 @@ void LuaState::BindAPI() {
     // ── UIScreen ───────────────────────────────────────────────────────────────
     lua.new_usertype<UIScreen>("UIScreen",
         sol::no_constructor,
-        "name",       &UIScreen::name,
+        "name",       sol::property(
+            [](const UIScreen& s) { return s.name; },
+            [](UIScreen& s, const std::string& v) { s.name = v; }),
         "add_frame",  &UIScreen::AddFrame,
         "add_button", &UIScreen::AddButton,
         "add_label",  &UIScreen::AddLabel
@@ -97,9 +108,9 @@ void LuaState::BindAPI() {
         engine.RequestQuit();
     };
 
-    // engine.log(msg) — prints to stdout with a [Lua] prefix
+    // engine.log(msg) — routes to EngineLog (stdout + in-game console)
     eng["log"] = [](const std::string& msg) {
-        std::printf("[Lua] %s\n", msg.c_str());
+        EngineLog::Log("[Lua] " + msg);
     };
 
     // ── engine.ui table ────────────────────────────────────────────────────────

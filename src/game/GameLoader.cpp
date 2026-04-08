@@ -26,26 +26,18 @@ GameDef GameLoader::Load(const std::string& game_dir) {
     try {
         auto tbl = toml::parse_file(toml_path);
 
-        if (auto game = tbl["game"].as_table()) {
-            def.id      = game->get_as<std::string>("id").value_or("");
-            def.name    = game->get_as<std::string>("name").value_or("Unnamed Game");
-            def.version = game->get_as<std::string>("version").value_or("0.1.0");
-        }
+        def.id      = tbl["game"]["id"]     .value_or(std::string(""));
+        def.name    = tbl["game"]["name"]   .value_or(std::string("Unnamed Game"));
+        def.version = tbl["game"]["version"].value_or(std::string("0.1.0"));
 
-        if (auto window = tbl["window"].as_table()) {
-            def.window_width  = static_cast<int>(window->get_as<int64_t>("width") .value_or(1280));
-            def.window_height = static_cast<int>(window->get_as<int64_t>("height").value_or(720));
-        }
+        def.window_width  = static_cast<int>(tbl["window"]["width"] .value_or(int64_t(1280)));
+        def.window_height = static_cast<int>(tbl["window"]["height"].value_or(int64_t(720)));
 
-        if (auto ui = tbl["ui"].as_table()) {
-            def.skin_path = ui->get_as<std::string>("skin").value_or("");
-            def.font_path = ui->get_as<std::string>("font").value_or("");
-            def.font_size = static_cast<int>(ui->get_as<int64_t>("font_size").value_or(14));
-        }
+        def.skin_path = tbl["ui"]["skin"]     .value_or(std::string(""));
+        def.font_path = tbl["ui"]["font"]     .value_or(std::string(""));
+        def.font_size = static_cast<int>(tbl["ui"]["font_size"].value_or(int64_t(14)));
 
-        if (auto startup = tbl["startup"].as_table()) {
-            def.startup_script = startup->get_as<std::string>("script").value_or("");
-        }
+        def.startup_script = tbl["startup"]["script"].value_or(std::string(""));
 
         if (auto load_arr = tbl["packages"]["load"].as_array()) {
             for (auto& item : *load_arr) {

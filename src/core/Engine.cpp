@@ -1,4 +1,5 @@
 #include "core/Engine.h"
+#include "core/EngineLog.h"
 #include "game/GameLoader.h"
 #include "input/InputAction.h"
 #include <cmath>
@@ -24,8 +25,9 @@ void Engine::Init(const std::string& game_path) {
     // 3. Default camera for when simulation starts
     cameras_.push_back(std::make_unique<Camera>(win_w, win_h, 2.0f));
 
-    // 4. UI system
-    ui_system_ = std::make_unique<UISystem>(window_->GetRenderer());
+    // 4. UI system + log console
+    ui_system_   = std::make_unique<UISystem>(window_->GetRenderer());
+    log_console_ = std::make_unique<LogConsole>(window_->GetRenderer());
     if (!game_def_.skin_path.empty())
         ui_system_->LoadSkin(game_def_.Resolve(game_def_.skin_path));
     ui_system_->LoadFont(
@@ -38,8 +40,10 @@ void Engine::Init(const std::string& game_path) {
         for (const auto& pkg : game_def_.packages)
             loader.LoadAll(pkg);
 
-        std::printf("Loaded %d materials, %d backgrounds\n",
-                    registry_.GetMaterialCount(), registry_.GetBackgroundCount());
+        char buf0[128];
+        std::snprintf(buf0, sizeof(buf0), "Loaded %d materials, %d backgrounds",
+                      registry_.GetMaterialCount(), registry_.GetBackgroundCount());
+        EngineLog::Log(buf0);
     }
 
     // 6. Lua state + startup script
@@ -51,8 +55,10 @@ void Engine::Init(const std::string& game_path) {
     // 7. Game loop (always last)
     game_loop_ = std::make_unique<GameLoop>(60);
 
-    std::printf("Engine initialized: window %dx%d, game '%s'\n",
-                win_w, win_h, game_def_.name.c_str());
+    char buf1[256];
+    std::snprintf(buf1, sizeof(buf1), "Engine initialized: window %dx%d, game '%s'",
+                  win_w, win_h, game_def_.name.c_str());
+    EngineLog::Log(buf1);
 }
 
 // ─── InitSimulation ───────────────────────────────────────────────────────────
@@ -112,8 +118,10 @@ void Engine::InitSimulation(const std::string& scenario_path) {
     debug_ui_ = std::make_unique<DebugUI>(window_->GetRenderer());
     sim_running_ = true;
 
-    std::printf("Simulation initialized: %dx%d terrain\n",
-                terrain_->GetWidth(), terrain_->GetHeight());
+    char buf_sim[128];
+    std::snprintf(buf_sim, sizeof(buf_sim), "Simulation initialized: %dx%d terrain",
+                  terrain_->GetWidth(), terrain_->GetHeight());
+    EngineLog::Log(buf_sim);
 }
 
 // ─── Run ──────────────────────────────────────────────────────────────────────
@@ -126,6 +134,10 @@ void Engine::Run() {
 
 void Engine::SimTick(double dt) {
     input_->PollEvents();
+
+    // Toggle log console with backtick
+    if (input_->GetRaw().IsJustPressed(SDL_SCANCODE_GRAVE))
+        log_console_visible_ = !log_console_visible_;
 
     // Route mouse events to the UI system (menus, HUD, etc.)
     ui_system_->HandleMouseMove(input_->GetMouseX(), input_->GetMouseY());
@@ -219,6 +231,9 @@ void Engine::Render(double alpha) {
     }
 
     ui_system_->Render();
+
+    if (log_console_visible_)
+        log_console_->Render(r);
 
     SDL_RenderPresent(r);
 }

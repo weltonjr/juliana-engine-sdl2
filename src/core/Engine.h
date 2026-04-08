@@ -19,6 +19,7 @@
 #include "game/GameDef.h"
 #include "ui/UISystem.h"
 #include "scripting/LuaState.h"
+#include "core/LogConsole.h"
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -70,6 +71,8 @@ private:
 
     std::vector<std::unique_ptr<Camera>> cameras_;
 
+    std::unique_ptr<LogConsole> log_console_;
+    bool log_console_visible_ = false;
     bool quit_requested_ = false;
 
     // ── Simulation (null until sim_running_ = true) ─────────────────────────────

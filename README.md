@@ -9,6 +9,7 @@ A spiritual clone of Clonk Endeavor — a 2D sandbox game featuring physics-base
 - Xcode Command Line Tools: `xcode-select --install`
 - CMake: `brew install cmake`
 - SDL2: `TODO`
+- TOML: `brew install cmake`
 
 ## Build
 
