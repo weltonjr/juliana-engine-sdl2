@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Map Editor",
+      "runtimeExecutable": "./build/juliana",
+      "runtimeArgs": ["packages/mapeditor/game"],
+      "port": 0
+    },
+    {
+      "name": "Aetherium Game",
+      "runtimeExecutable": "./build/juliana",
+      "runtimeArgs": ["packages/aetherium/game"],
+      "port": 0
+    },
+    {
+      "name": "Web Build (HTTP server)",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "--directory", "build-web", "8080"],
+      "port": 8080
+    }
+  ]
+}

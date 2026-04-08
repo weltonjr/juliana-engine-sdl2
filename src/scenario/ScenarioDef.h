@@ -66,13 +66,21 @@ struct PlayerSlot {
     std::vector<SpawnObject> objects;
 };
 
+struct CellOverride {
+    int x = 0, y = 0;
+    std::string material_id;    // qualified id, e.g. "base:Rock"
+    std::string background_id;  // may be empty
+};
+
 struct ScenarioDef {
     std::string id;
     std::string name;
     std::string description;
+    std::string icon;           // path relative to scenario folder, e.g. "icon.png"
     std::vector<std::string> packages;
     std::vector<std::string> aspects;
 
     MapConfig map;
     std::vector<PlayerSlot> players;
+    std::vector<CellOverride> overrides;  // manual cell edits applied after generation
 };

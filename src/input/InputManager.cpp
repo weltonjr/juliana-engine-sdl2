@@ -43,6 +43,12 @@ bool InputManager::IsMouseDown(int button) const         { return raw_->IsMouseD
 bool InputManager::IsMouseJustPressed(int button) const  { return raw_->IsMouseJustPressed(button); }
 bool InputManager::IsMouseJustReleased(int button) const { return raw_->IsMouseJustReleased(button); }
 
+int  InputManager::GetScrollY()          const { return raw_->GetScrollY(); }
+const std::string& InputManager::GetTextInput() const { return raw_->GetTextInput(); }
+void InputManager::StartTextInput()            { raw_->StartTextInput(); }
+void InputManager::StopTextInput()             { raw_->StopTextInput(); }
+bool InputManager::IsTextInputActive()   const { return raw_->IsTextInputActive(); }
+
 void InputManager::SetBinding(int slot, InputAction action, ActionBinding binding) {
     if (!SlotValid(slot)) {
         std::fprintf(stderr, "InputManager::SetBinding: invalid slot %d\n", slot);

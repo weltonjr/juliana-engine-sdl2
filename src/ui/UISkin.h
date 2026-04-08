@@ -25,6 +25,10 @@ struct UISkin {
     // Labels
     UIColor label_text  = {175, 175, 210, 255};
 
+    // Input elements
+    UIColor input_focus_border = {120, 160, 255, 255};
+    UIColor input_placeholder  = {100, 100, 130, 255};
+
     // Load from a skin.toml file; returns defaults if file is missing or malformed
     static UISkin LoadFromFile(const std::string& path);
 };

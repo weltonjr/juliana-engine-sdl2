@@ -25,3 +25,12 @@ std::shared_ptr<UIElement> UIElement::AddLabel(const std::string& label, int px,
     children.push_back(el);
     return el;
 }
+
+std::shared_ptr<UIElement> UIElement::AddInput(const std::string& placeholder, int px, int py, int pw, int ph) {
+    auto el = std::make_shared<UIElement>();
+    el->type = UIElementType::Input;
+    el->text = placeholder;  // used as placeholder when value is empty
+    el->x = px; el->y = py; el->w = pw; el->h = ph;
+    children.push_back(el);
+    return el;
+}

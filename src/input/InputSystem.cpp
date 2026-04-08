@@ -10,6 +10,10 @@ void InputSystem::PollEvents() {
     std::memcpy(previous_keys_, current_keys_, sizeof(current_keys_));
     previous_mouse_ = current_mouse_;
 
+    // Reset per-frame accumulators
+    scroll_y_ = 0;
+    text_input_.clear();
+
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
@@ -17,6 +21,12 @@ void InputSystem::PollEvents() {
         }
         if (event.type == SDL_KEYDOWN && event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
             quit_ = true;
+        }
+        if (event.type == SDL_MOUSEWHEEL) {
+            scroll_y_ += event.wheel.y;
+        }
+        if (event.type == SDL_TEXTINPUT && text_input_active_) {
+            text_input_ += event.text.text;
         }
     }
 
@@ -28,6 +38,16 @@ void InputSystem::PollEvents() {
     const uint8_t* state = SDL_GetKeyboardState(&num_keys);
     int copy_count = num_keys < MAX_KEYS ? num_keys : MAX_KEYS;
     std::memcpy(current_keys_, state, copy_count);
+}
+
+void InputSystem::StartTextInput() {
+    text_input_active_ = true;
+    SDL_StartTextInput();
+}
+
+void InputSystem::StopTextInput() {
+    text_input_active_ = false;
+    SDL_StopTextInput();
 }
 
 bool InputSystem::IsMouseDown(int button) const {

@@ -4,6 +4,7 @@
 #include "input/InputAction.h"
 #include <cmath>
 #include <cstdio>
+#include <array>
 
 Engine::Engine() = default;
 Engine::~Engine() = default;
@@ -33,6 +34,12 @@ void Engine::Init(const std::string& game_path) {
     ui_system_->LoadFont(
         game_def_.font_path.empty() ? "" : game_def_.Resolve(game_def_.font_path),
         game_def_.font_size);
+
+    // Wire text input mode (SDL_StartTextInput/StopTextInput) to UI focus events
+    ui_system_->SetTextInputCallback([this](bool on) {
+        if (on) input_->StartTextInput();
+        else    input_->StopTextInput();
+    });
 
     // 5. Load content packages declared by the game definition
     if (!game_def_.packages.empty()) {
@@ -124,6 +131,52 @@ void Engine::InitSimulation(const std::string& scenario_path) {
     EngineLog::Log(buf_sim);
 }
 
+// ─── Generic terrain generation (no entities/physics) ────────────────────────
+
+void Engine::GenerateTerrain(const ScenarioDef& scenario) {
+    terrain_ = std::make_unique<Terrain>(
+        MapGenerator::GenerateFromScenario(scenario, registry_)
+    );
+
+    // Apply cell overrides (from map editor manual edits)
+    for (auto& ov : scenario.overrides) {
+        if (!ov.material_id.empty()) {
+            const auto* mat = registry_.GetMaterial(ov.material_id);
+            if (mat) terrain_->SetMaterial(ov.x, ov.y, mat->runtime_id);
+        }
+        if (!ov.background_id.empty()) {
+            const auto* bg = registry_.GetBackground(ov.background_id);
+            if (bg) terrain_->SetBackground(ov.x, ov.y, bg->runtime_id);
+        }
+    }
+
+    terrain_renderer_ = std::make_unique<TerrainRenderer>(
+        window_->GetRenderer(), *terrain_, &registry_
+    );
+    terrain_renderer_->FullRebuild();
+
+    // Centre camera on the terrain
+    if (!cameras_.empty()) {
+        float cx = (terrain_->GetWidth()  - cameras_[0]->GetViewWorldWidth())  / 2.0f;
+        float cy = (terrain_->GetHeight() - cameras_[0]->GetViewWorldHeight()) / 2.0f;
+        cameras_[0]->SetPosition(cx, cy);
+        cameras_[0]->ClampToBounds(terrain_->GetWidth(), terrain_->GetHeight());
+    }
+
+    char buf[128];
+    std::snprintf(buf, sizeof(buf), "Terrain generated: %dx%d cells",
+                  terrain_->GetWidth(), terrain_->GetHeight());
+    EngineLog::Log(buf);
+}
+
+void Engine::UnloadTerrain() {
+    terrain_renderer_.reset();
+    terrain_.reset();
+}
+
+const InputSystem&  Engine::GetRaw()   const { return input_->GetRaw(); }
+const InputManager& Engine::GetInput() const { return *input_; }
+
 // ─── Run ──────────────────────────────────────────────────────────────────────
 
 void Engine::Run() {
@@ -145,6 +198,19 @@ void Engine::SimTick(double dt) {
         ui_system_->HandleMouseDown(input_->GetMouseX(), input_->GetMouseY());
     if (input_->IsMouseJustReleased())
         ui_system_->HandleMouseUp(input_->GetMouseX(), input_->GetMouseY());
+
+    // Route keyboard events to focused input elements
+    static constexpr std::array<SDL_Scancode, 4> INPUT_KEYS = {
+        SDL_SCANCODE_BACKSPACE, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_ESCAPE
+    };
+    for (auto sc : INPUT_KEYS) {
+        if (input_->GetRaw().IsJustPressed(sc))
+            ui_system_->HandleKeyDown(sc);
+    }
+    ui_system_->HandleTextInput(input_->GetTextInput());
+
+    // Per-tick Lua callback (editor camera, shortcuts, etc.)
+    if (tick_callback_) tick_callback_(dt);
 
     if (!sim_running_) return;
 
@@ -224,8 +290,11 @@ void Engine::Render(double alpha) {
     SDL_SetRenderDrawColor(r, 0, 0, 0, 255);
     SDL_RenderClear(r);
 
-    if (sim_running_) {
+    // Render terrain whenever it is loaded (game simulation or editor preview)
+    if (terrain_renderer_) {
         terrain_renderer_->Render(r, *cameras_[0]);
+    }
+    if (sim_running_) {
         RenderEntities(r, alpha);
         debug_ui_->Render(r);
     }

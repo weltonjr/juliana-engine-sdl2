@@ -7,6 +7,7 @@
 #include "terrain/MapGenerator.h"
 #include "render/Camera.h"
 #include "input/InputManager.h"
+#include "input/InputSystem.h"
 #include "package/DefinitionRegistry.h"
 #include "package/PackageLoader.h"
 #include "entity/EntityManager.h"
@@ -20,6 +21,7 @@
 #include "ui/UISystem.h"
 #include "scripting/LuaState.h"
 #include "core/LogConsole.h"
+#include <functional>
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -39,6 +41,42 @@ public:
     bool ShouldQuit() const;
     void SetWindowTitle(const char* title);
     void RequestQuit() { quit_requested_ = true; }
+
+    // Generic terrain API — generate terrain from a ScenarioDef (no entities/physics)
+    void GenerateTerrain(const ScenarioDef& scenario);
+    void UnloadTerrain();
+
+    // Per-tick Lua callback — called every SimTick regardless of sim state
+    void SetTickCallback(std::function<void(double)> fn) { tick_callback_ = std::move(fn); }
+
+    // Raw input access for Lua bindings
+    const InputSystem&  GetRaw()   const;
+    const InputManager& GetInput() const;
+
+    // Terrain state queries
+    bool IsTerrainLoaded()  const { return terrain_renderer_ != nullptr; }
+    int  GetTerrainWidth()  const { return terrain_ ? terrain_->GetWidth()  : 0; }
+    int  GetTerrainHeight() const { return terrain_ ? terrain_->GetHeight() : 0; }
+
+    // Camera accessors for Lua
+    float GetCameraX()    const { return cameras_.empty() ? 0.f : cameras_[0]->GetX(); }
+    float GetCameraY()    const { return cameras_.empty() ? 0.f : cameras_[0]->GetY(); }
+    float GetCameraZoom() const { return cameras_.empty() ? 1.f : cameras_[0]->GetScale(); }
+    void  SetCameraPosition(float x, float y) {
+        if (!cameras_.empty()) {
+            cameras_[0]->SetPosition(x, y);
+            if (terrain_) cameras_[0]->ClampToBounds(terrain_->GetWidth(), terrain_->GetHeight());
+        }
+    }
+    void MoveCamera(float dx, float dy) {
+        if (!cameras_.empty()) {
+            cameras_[0]->Move(dx, dy);
+            if (terrain_) cameras_[0]->ClampToBounds(terrain_->GetWidth(), terrain_->GetHeight());
+        }
+    }
+    void SetCameraZoom(float s) {
+        if (!cameras_.empty()) cameras_[0]->SetScale(s);
+    }
 
     const DefinitionRegistry& GetRegistry() const { return registry_; }
 
@@ -74,6 +112,8 @@ private:
     std::unique_ptr<LogConsole> log_console_;
     bool log_console_visible_ = false;
     bool quit_requested_ = false;
+
+    std::function<void(double)> tick_callback_;
 
     // ── Simulation (null until sim_running_ = true) ─────────────────────────────
     bool sim_running_ = false;

@@ -25,3 +25,12 @@ std::shared_ptr<UIElement> UIScreen::AddLabel(const std::string& text, int x, in
     root_elements.push_back(el);
     return el;
 }
+
+std::shared_ptr<UIElement> UIScreen::AddInput(const std::string& placeholder, int x, int y, int w, int h) {
+    auto el = std::make_shared<UIElement>();
+    el->type = UIElementType::Input;
+    el->text = placeholder;
+    el->x = x; el->y = y; el->w = w; el->h = h;
+    root_elements.push_back(el);
+    return el;
+}

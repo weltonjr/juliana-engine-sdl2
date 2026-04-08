@@ -15,6 +15,6 @@ font_size = 14
 [startup]
 script = "scripts/main.lua"
 
-# Content packages loaded when a map is open (none needed for the menu)
-# [packages]
-# load = []
+# Content packages needed for terrain generation (materials, backgrounds)
+[packages]
+load = ["packages/aetherium/base"]

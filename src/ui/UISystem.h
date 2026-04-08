@@ -3,6 +3,7 @@
 #include "ui/UIScreen.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+#include <functional>
 #include <memory>
 #include <vector>
 #include <string>
@@ -37,6 +38,11 @@ public:
     void HandleMouseMove (int x, int y);
     void HandleMouseDown (int x, int y);
     void HandleMouseUp   (int x, int y);
+    void HandleTextInput (const std::string& text);
+    void HandleKeyDown   (SDL_Scancode key);
+
+    // Called by Engine to wire Start/StopTextInput when an Input element gains/loses focus
+    void SetTextInputCallback(std::function<void(bool)> cb);
 
     // --- Render (call once per frame, after game world rendering) ---
     void Render();
@@ -51,6 +57,8 @@ private:
     int  mouse_x_ = 0, mouse_y_ = 0;
     bool mouse_down_ = false;
     UIElement* pressed_element_ = nullptr;  // raw ptr; lifetime owned by screen_stack_
+    UIElement* focused_input_   = nullptr;  // currently focused Input element
+    std::function<void(bool)> text_mode_cb_;  // called with true/false on focus gain/loss
 
     // --- Absolute position computation ---
     void ComputeAbsPositions(UIElement& el, int parent_x, int parent_y);
@@ -68,6 +76,7 @@ private:
     void RenderFrame  (const UIElement& el);
     void RenderButton (const UIElement& el);
     void RenderLabel  (const UIElement& el);
+    void RenderInput  (const UIElement& el);
 
     void DrawFilledRect(int x, int y, int w, int h, UIColor color);
     void DrawRectBorder(int x, int y, int w, int h, UIColor color);

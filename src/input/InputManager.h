@@ -34,6 +34,13 @@ public:
     bool IsMouseJustPressed (int button = SDL_BUTTON_LEFT) const;
     bool IsMouseJustReleased(int button = SDL_BUTTON_LEFT) const;
 
+    // Scroll wheel and text input — delegates to raw InputSystem
+    int  GetScrollY()          const;
+    const std::string& GetTextInput() const;
+    void StartTextInput();
+    void StopTextInput();
+    bool IsTextInputActive()   const;
+
     // Replace the full binding for an action at runtime (key rebinding / gamepad setup).
     void SetBinding(int slot, InputAction action, ActionBinding binding);
 

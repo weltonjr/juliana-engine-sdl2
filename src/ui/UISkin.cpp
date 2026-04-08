@@ -37,7 +37,9 @@ UISkin UISkin::LoadFromFile(const std::string& path) {
             skin.button_pressed= ReadColor(*colors, "button_pressed",skin.button_pressed);
             skin.button_border = ReadColor(*colors, "button_border", skin.button_border);
             skin.button_text   = ReadColor(*colors, "button_text",   skin.button_text);
-            skin.label_text    = ReadColor(*colors, "label_text",    skin.label_text);
+            skin.label_text         = ReadColor(*colors, "label_text",         skin.label_text);
+            skin.input_focus_border = ReadColor(*colors, "input_focus_border", skin.input_focus_border);
+            skin.input_placeholder  = ReadColor(*colors, "input_placeholder",  skin.input_placeholder);
         }
     } catch (const toml::parse_error& e) {
         std::fprintf(stderr, "UISkin: parse error in '%s': %s\n", path.c_str(), e.what());

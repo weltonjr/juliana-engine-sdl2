@@ -13,13 +13,19 @@ public:
     LuaState(Engine& engine, UISystem& ui);
     ~LuaState();
 
-    // Execute a Lua file; base_path sets package.path so require() works.
+    // Execute a Lua file with full engine API access (trusted game scripts).
+    // base_path sets package.path so require() works.
     // Returns false and prints the error on failure.
     bool RunScript(const std::string& path, const std::string& base_path = "");
+
+    // Execute a Lua file in a sandboxed environment (mod/aspect scripts).
+    // Removes: engine.fs, engine.json, io, os, dofile, loadfile, require.
+    bool RunSandboxedScript(const std::string& path, const std::string& base_path = "");
 
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 
     void BindAPI();
+    void SetPackagePath(const std::string& base_path);
 };

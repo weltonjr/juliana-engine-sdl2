@@ -4,7 +4,7 @@
 #include <memory>
 #include <functional>
 
-enum class UIElementType { Frame, Button, Label, Image };
+enum class UIElementType { Frame, Button, Label, Image, Input };
 
 // A single UI element. Elements form a tree: Frames can contain any children.
 // Positions are relative to the parent element (or screen origin for root elements).
@@ -25,6 +25,13 @@ struct UIElement {
     bool hovered = false;
     bool pressed  = false;
 
+    // Input element state
+    std::string value;           // current text content
+    int         cursor = 0;      // insertion point (character index)
+    bool        focused = false;
+    int         max_length = 256;
+    std::function<void(const std::string&)> on_change;
+
     // Children (Frames can hold any element type)
     std::vector<std::shared_ptr<UIElement>> children;
 
@@ -35,4 +42,5 @@ struct UIElement {
     std::shared_ptr<UIElement> AddFrame (int x, int y, int w, int h);
     std::shared_ptr<UIElement> AddButton(const std::string& text, int x, int y, int w, int h);
     std::shared_ptr<UIElement> AddLabel (const std::string& text, int x, int y);
+    std::shared_ptr<UIElement> AddInput (const std::string& placeholder, int x, int y, int w, int h);
 };

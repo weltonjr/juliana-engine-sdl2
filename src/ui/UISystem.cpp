@@ -1,4 +1,5 @@
 #include "ui/UISystem.h"
+#include <algorithm>
 #include <cstdio>
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
@@ -65,6 +66,10 @@ void UISystem::PopScreen() {
     if (!screen_stack_.empty()) screen_stack_.pop_back();
 }
 
+void UISystem::SetTextInputCallback(std::function<void(bool)> cb) {
+    text_mode_cb_ = std::move(cb);
+}
+
 // ─── Absolute position computation ───────────────────────────────────────────
 
 void UISystem::ComputeAbsPositions(UIElement& el, int parent_x, int parent_y) {
@@ -89,7 +94,8 @@ UIElement* UISystem::FindButtonAt(UIElement& el, int mx, int my) {
         UIElement* found = FindButtonAt(*child, mx, my);
         if (found) return found;
     }
-    if (el.type == UIElementType::Button && el.visible) {
+    bool interactive = (el.type == UIElementType::Button || el.type == UIElementType::Input);
+    if (interactive && el.visible) {
         if (mx >= el.abs_x && mx < el.abs_x + el.w &&
             my >= el.abs_y && my < el.abs_y + el.h)
             return &el;
@@ -142,9 +148,65 @@ void UISystem::HandleMouseDown(int x, int y) {
     UIScreen& screen = *screen_stack_.back();
     ComputeScreenAbsPositions(screen);
     UIElement* target = FindButtonAtScreen(screen, x, y);
-    if (target) {
-        target->pressed  = true;
+
+    if (target && target->type == UIElementType::Input) {
+        // Blur previously focused input
+        if (focused_input_ && focused_input_ != target) {
+            focused_input_->focused = false;
+        }
+        // Focus this input
+        target->focused  = true;
+        focused_input_   = target;
         pressed_element_ = target;
+        if (text_mode_cb_) text_mode_cb_(true);
+    } else {
+        // Clicked outside an input — blur current focus
+        if (focused_input_) {
+            focused_input_->focused = false;
+            focused_input_ = nullptr;
+            if (text_mode_cb_) text_mode_cb_(false);
+        }
+        if (target) {
+            target->pressed  = true;
+            pressed_element_ = target;
+        }
+    }
+}
+
+void UISystem::HandleTextInput(const std::string& text) {
+    if (!focused_input_ || text.empty()) return;
+    // Insert characters at cursor, respecting max_length
+    for (char ch : text) {
+        if (static_cast<int>(focused_input_->value.size()) >= focused_input_->max_length) break;
+        focused_input_->value.insert(focused_input_->value.begin() + focused_input_->cursor, ch);
+        focused_input_->cursor++;
+    }
+    if (focused_input_->on_change) focused_input_->on_change(focused_input_->value);
+}
+
+void UISystem::HandleKeyDown(SDL_Scancode key) {
+    if (!focused_input_) return;
+    auto& el = *focused_input_;
+    switch (key) {
+        case SDL_SCANCODE_BACKSPACE:
+            if (el.cursor > 0) {
+                el.value.erase(el.cursor - 1, 1);
+                el.cursor--;
+                if (el.on_change) el.on_change(el.value);
+            }
+            break;
+        case SDL_SCANCODE_LEFT:
+            if (el.cursor > 0) el.cursor--;
+            break;
+        case SDL_SCANCODE_RIGHT:
+            if (el.cursor < static_cast<int>(el.value.size())) el.cursor++;
+            break;
+        case SDL_SCANCODE_ESCAPE:
+            el.focused    = false;
+            focused_input_ = nullptr;
+            if (text_mode_cb_) text_mode_cb_(false);
+            break;
+        default: break;
     }
 }
 
@@ -186,6 +248,7 @@ void UISystem::RenderElement(const UIElement& el) {
         case UIElementType::Frame:  RenderFrame(el);  break;
         case UIElementType::Button: RenderButton(el); break;
         case UIElementType::Label:  RenderLabel(el);  break;
+        case UIElementType::Input:  RenderInput(el);  break;
         case UIElementType::Image:  break;  // TODO: sprite rendering
     }
     for (auto& child : el.children) {
@@ -212,6 +275,34 @@ void UISystem::RenderButton(const UIElement& el) {
 void UISystem::RenderLabel(const UIElement& el) {
     if (!el.text.empty()) {
         DrawText(el.text, el.abs_x, el.abs_y, skin_.label_text.ToSDL());
+    }
+}
+
+void UISystem::RenderInput(const UIElement& el) {
+    // Background + border
+    DrawFilledRect(el.abs_x, el.abs_y, el.w, el.h, skin_.frame_bg);
+    UIColor border = el.focused ? skin_.input_focus_border : skin_.frame_border;
+    DrawRectBorder(el.abs_x, el.abs_y, el.w, el.h, border);
+
+    // Draw value or placeholder
+    const int PAD = 4;
+    if (!el.value.empty()) {
+        DrawText(el.value, el.abs_x + PAD, el.abs_y + (el.h - 14) / 2, skin_.button_text.ToSDL());
+    } else if (!el.text.empty()) {
+        DrawText(el.text, el.abs_x + PAD, el.abs_y + (el.h - 14) / 2, skin_.input_placeholder.ToSDL());
+    }
+
+    // Blinking cursor when focused
+    if (el.focused && (SDL_GetTicks() % 1000 < 500) && font_) {
+        // Measure text up to cursor position to find x offset
+        std::string before_cursor = el.value.substr(0, static_cast<size_t>(el.cursor));
+        int tw = 0, th = 0;
+        TTF_SizeUTF8(font_, before_cursor.empty() ? " " : before_cursor.c_str(), &tw, &th);
+        int cx = el.abs_x + PAD + (before_cursor.empty() ? 0 : tw);
+        int cy = el.abs_y + 3;
+        SDL_SetRenderDrawColor(renderer_, border.r, border.g, border.b, 200);
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        SDL_RenderDrawLine(renderer_, cx, cy, cx, cy + el.h - 6);
     }
 }
 
