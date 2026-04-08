@@ -47,7 +47,9 @@ bool LuaState::RunScript(const std::string& path, const std::string& base_path) 
 
     if (!result.valid()) {
         sol::error err = result;
-        std::fprintf(stderr, "Lua error in '%s': %s\n", path.c_str(), err.what());
+        std::string msg = std::string("[Lua error] ") + path + ": " + err.what();
+        EngineLog::Log(msg);
+        std::fprintf(stderr, "%s\n", msg.c_str());
         return false;
     }
     return true;
@@ -61,7 +63,8 @@ void LuaState::BindAPI() {
     auto& ui     = impl_->ui;
 
     lua.open_libraries(sol::lib::base, sol::lib::math,
-                       sol::lib::string, sol::lib::table, sol::lib::io);
+                       sol::lib::string, sol::lib::table, sol::lib::io,
+                       sol::lib::package);
 
     // ── UIElement ──────────────────────────────────────────────────────────────
     // Exposed as a shared_ptr usertype so Lua can hold references to child elements.

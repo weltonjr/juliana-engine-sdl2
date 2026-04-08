@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cmake --version)"
+      "Bash(cmake --version)",
+      "Bash(python3 -c ':*)"
     ]
   }
 }

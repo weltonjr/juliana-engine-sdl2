@@ -9,7 +9,7 @@ height = 720
 
 [ui]
 skin      = "ui/skin.toml"
-# font    = "ui/font.ttf"   # optional; falls back to system fonts when absent
+font      = "ui/console.ttf"
 font_size = 14
 
 [startup]
