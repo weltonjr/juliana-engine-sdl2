@@ -31,21 +31,29 @@ function M.show(search_dir, on_select)
         end
     end
 
+    -- Size dialog to fit content (capped at MAX_VISIBLE rows)
+    local visible_rows = math.max(1, math.min(#matches, MAX_VISIBLE))
+    local HEADER_H = 30
+    local FOOTER_H = 50
+    local list_h   = visible_rows * ROW_H
+    local dlg_h    = HEADER_H + list_h + FOOTER_H
+    local dlg_y    = (WIN_H - dlg_h) / 2
+
     local screen = engine.ui.create_screen("file_dialog")
 
     -- Semi-transparent backdrop
     local backdrop = screen:add_frame(0, 0, WIN_W, WIN_H)
 
     -- Dialog box
-    local dlg = backdrop:add_frame(DLG_X, DLG_Y, DLG_W, DLG_H)
+    local dlg = backdrop:add_frame(DLG_X, dlg_y, DLG_W, dlg_h)
 
     dlg:add_label("Open Scenario", 10, 8)
 
     -- Scrollable list area
     local LIST_X  = 10
-    local LIST_Y  = 30
+    local LIST_Y  = HEADER_H
     local LIST_W  = DLG_W - 20
-    local LIST_H  = DLG_H - 80
+    local LIST_H  = list_h
     local list_frame = dlg:add_frame(LIST_X, LIST_Y, LIST_W, LIST_H)
 
     local scroll_offset = 0   -- first visible item index (0-based)
@@ -55,6 +63,7 @@ function M.show(search_dir, on_select)
     for i, f in ipairs(matches) do
         local display = f.path  -- show full path for clarity
         local btn = list_frame:add_button(display, 0, (i-1) * ROW_H, LIST_W - 2, ROW_H - 2)
+        btn.text_left = true
         btn.visible = false  -- will be shown by refresh
         item_btns[i] = btn
         btn:on_click(function()
@@ -82,7 +91,7 @@ function M.show(search_dir, on_select)
     end
 
     -- Cancel button
-    local cancel_btn = dlg:add_button("Cancel", DLG_W - 100, DLG_H - 36, 90, 28)
+    local cancel_btn = dlg:add_button("Cancel", DLG_W - 100, dlg_h - 36, 90, 28)
     cancel_btn:on_click(function()
         engine.ui.pop_screen()
     end)

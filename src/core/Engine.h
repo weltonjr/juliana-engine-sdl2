@@ -104,8 +104,8 @@ private:
     std::unique_ptr<Window>       window_;
     std::unique_ptr<GameLoop>     game_loop_;
     std::unique_ptr<InputManager> input_;
-    std::unique_ptr<UISystem>     ui_system_;
     std::unique_ptr<LuaState>     lua_state_;
+    std::unique_ptr<UISystem>     ui_system_;
 
     std::vector<std::unique_ptr<Camera>> cameras_;
 

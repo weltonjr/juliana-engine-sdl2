@@ -275,6 +275,18 @@ void LuaState::BindAPI() {
         "visible", sol::property(
             [](const UIElement& el) { return el.visible; },
             [](UIElement& el, bool v) { el.visible = v; }),
+        "x",       sol::property(
+            [](const UIElement& el) { return el.x; },
+            [](UIElement& el, int v) { el.x = v; }),
+        "y",       sol::property(
+            [](const UIElement& el) { return el.y; },
+            [](UIElement& el, int v) { el.y = v; }),
+        "w",       sol::property(
+            [](const UIElement& el) { return el.w; },
+            [](UIElement& el, int v) { el.w = v; }),
+        "h",       sol::property(
+            [](const UIElement& el) { return el.h; },
+            [](UIElement& el, int v) { el.h = v; }),
         "text",    sol::property(
             [](const UIElement& el) { return el.text; },
             [](UIElement& el, const std::string& v) { el.text = v; }),
@@ -284,6 +296,9 @@ void LuaState::BindAPI() {
         "focused", sol::property(
             [](const UIElement& el) { return el.focused; },
             [](UIElement& el, bool v) { el.focused = v; }),
+        "text_left", sol::property(
+            [](const UIElement& el) { return el.text_left; },
+            [](UIElement& el, bool v) { el.text_left = v; }),
 
         "on_click", [](UIElement& el, sol::function fn) {
             el.on_click = [fn]() mutable {

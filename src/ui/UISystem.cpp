@@ -218,13 +218,19 @@ void UISystem::HandleMouseUp(int x, int y) {
     ComputeScreenAbsPositions(screen);
     UIElement* target = FindButtonAtScreen(screen, x, y);
 
-    // Fire on_click only if released over the same element that was pressed
-    if (target && target == pressed_element_ && target->on_click) {
-        target->on_click();
-    }
-    if (pressed_element_) {
-        pressed_element_->pressed = false;
-        pressed_element_ = nullptr;
+    // Clear pressed_element_ BEFORE calling on_click — the callback may call
+    // pop_screen(), destroying the screen and all UIElements (including this button).
+    // Accessing pressed_element_ after on_click() would be a use-after-free.
+    UIElement* was_pressed  = pressed_element_;
+    pressed_element_ = nullptr;
+
+    if (was_pressed) was_pressed->pressed = false;
+
+    if (target && target == was_pressed && target->on_click) {
+        // Copy the callback before calling it — on_click may trigger pop_screen(),
+        // destroying the UIElement (and the original on_click) mid-execution.
+        auto fn = target->on_click;
+        fn();
     }
 }
 
@@ -268,7 +274,13 @@ void UISystem::RenderButton(const UIElement& el) {
     DrawFilledRect(el.abs_x, el.abs_y, el.w, el.h, bg);
     DrawRectBorder(el.abs_x, el.abs_y, el.w, el.h, skin_.button_border);
     if (!el.text.empty()) {
-        DrawTextCentered(el.text, el.abs_x, el.abs_y, el.w, el.h, skin_.button_text.ToSDL());
+        if (el.text_left) {
+            const int PAD = 6;
+            int ty = el.abs_y + (el.h - 14) / 2;
+            DrawText(el.text, el.abs_x + PAD, ty, skin_.button_text.ToSDL());
+        } else {
+            DrawTextCentered(el.text, el.abs_x, el.abs_y, el.w, el.h, skin_.button_text.ToSDL());
+        }
     }
 }
 

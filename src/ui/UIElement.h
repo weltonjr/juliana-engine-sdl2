@@ -19,6 +19,7 @@ struct UIElement {
 
     // Content (used by Button and Label)
     std::string text;
+    bool        text_left = false;  // if true, button text is left-aligned with padding
 
     // Button interaction
     std::function<void()> on_click;
