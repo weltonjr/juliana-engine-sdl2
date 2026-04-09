@@ -325,14 +325,29 @@ void UISystem::DrawRectBorder(int x, int y, int w, int h, UIColor c) {
 void UISystem::DrawText(const std::string& text, int x, int y, SDL_Color color) {
     if (!font_) return;
     SDL_Surface* surf = TTF_RenderUTF8_Blended(font_, text.c_str(), color);
-    if (!surf) return;
-    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer_, surf);
-    if (tex) {
-        SDL_Rect dst = {x, y, surf->w, surf->h};
-        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
-        SDL_DestroyTexture(tex);
+    if (!surf) {
+        std::fprintf(stderr, "UISystem::DrawText: TTF_RenderUTF8_Blended failed: %s\n", TTF_GetError());
+        return;
     }
+    // Convert to a known-good format for the renderer before creating texture
+    SDL_Surface* conv = SDL_ConvertSurfaceFormat(surf, SDL_PIXELFORMAT_RGBA8888, 0);
     SDL_FreeSurface(surf);
+    if (!conv) {
+        std::fprintf(stderr, "UISystem::DrawText: SDL_ConvertSurfaceFormat failed: %s\n", SDL_GetError());
+        return;
+    }
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer_, conv);
+    SDL_FreeSurface(conv);
+    if (!tex) {
+        std::fprintf(stderr, "UISystem::DrawText: SDL_CreateTextureFromSurface failed: %s\n", SDL_GetError());
+        return;
+    }
+    // Explicitly set blend mode so alpha channel is used (required for Blended render)
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    SDL_Rect dst = {x, y, 0, 0};
+    SDL_QueryTexture(tex, nullptr, nullptr, &dst.w, &dst.h);
+    SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+    SDL_DestroyTexture(tex);
 }
 
 void UISystem::DrawTextCentered(const std::string& text, int bx, int by,

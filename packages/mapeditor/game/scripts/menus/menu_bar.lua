@@ -19,7 +19,14 @@ local M = {}
 
 local MENU_H  = layout.MENU_H
 local WIN_W   = layout.WIN_W
-local BTN_W   = 64   -- width of each top-level menu button
+
+-- Width per top-level menu button (sized to fit label + padding)
+local MENU_DEFS = {
+    { label = "File",     w = 52  },
+    { label = "Edit",     w = 52  },
+    { label = "Scenario", w = 80  },
+    { label = "About",    w = 60  },
+}
 
 -- Track which dropdown is open (nil = all closed)
 local open_dropdown = nil
@@ -37,51 +44,59 @@ function M.build(screen, actions)
     -- Background bar frame
     local bar = screen:add_frame(0, 0, WIN_W, MENU_H)
 
-    local menus = {
-        { label = "File",     x = 0 },
-        { label = "Edit",     x = BTN_W },
-        { label = "Scenario", x = BTN_W * 2 },
-        { label = "About",    x = BTN_W * 3 },
-    }
+    -- Assign x positions from widths
+    local x = 0
+    for _, m in ipairs(MENU_DEFS) do
+        m.x = x
+        x = x + m.w
+    end
+
+    local menus = MENU_DEFS
 
     local dropdowns = {}
 
     -- Build each top-level menu button + its dropdown frame
     for idx, menu in ipairs(menus) do
-        local btn = bar:add_button(menu.label, menu.x, 0, BTN_W, MENU_H)
+        local btn = bar:add_button(menu.label, menu.x, 0, menu.w, MENU_H)
 
         -- Dropdown frame (hidden by default), attached to the bar
+        -- Dropdown is at least as wide as the button, wider for long item labels
         local items
+        local dd_w = menu.w  -- minimum dropdown width matches button
         if menu.label == "File" then
+            dd_w = 110
             items = {
-                { label = "New",      fn = actions.on_new     },
-                { label = "Open...",  fn = actions.on_open    },
-                { label = "Save",     fn = actions.on_save    },
+                { label = "New",       fn = actions.on_new     },
+                { label = "Open...",   fn = actions.on_open    },
+                { label = "Save",      fn = actions.on_save    },
                 { label = "Save As...",fn = actions.on_save_as },
-                { label = "Exit",     fn = actions.on_quit    },
+                { label = "Exit",      fn = actions.on_quit    },
             }
         elseif menu.label == "Edit" then
+            dd_w = 80
             items = {
                 { label = "Undo",  fn = actions.on_undo },
                 { label = "Redo",  fn = actions.on_redo },
             }
         elseif menu.label == "Scenario" then
+            dd_w = 110
             items = {
                 { label = "Properties", fn = actions.toggle_panel },
             }
         elseif menu.label == "About" then
+            dd_w = 150
             items = {
                 { label = "About Map Editor", fn = actions.on_about },
             }
         end
 
         local dd_h = #items * MENU_H
-        local dd = bar:add_frame(menu.x, MENU_H, BTN_W + 20, dd_h)
+        local dd = bar:add_frame(menu.x, MENU_H, dd_w, dd_h)
         dd.visible = false
         dropdowns[idx] = dd
 
         for i, item in ipairs(items) do
-            local ib = dd:add_button(item.label, 0, (i-1) * MENU_H, BTN_W + 20, MENU_H)
+            local ib = dd:add_button(item.label, 0, (i-1) * MENU_H, dd_w, MENU_H)
             ib:on_click(function()
                 close_all(dropdowns)
                 if item.fn then item.fn() end

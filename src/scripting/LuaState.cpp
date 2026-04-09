@@ -286,16 +286,47 @@ void LuaState::BindAPI() {
             [](UIElement& el, bool v) { el.focused = v; }),
 
         "on_click", [](UIElement& el, sol::function fn) {
-            el.on_click = [fn]() mutable { fn(); };
+            el.on_click = [fn]() mutable {
+                auto res = fn();
+                if (!res.valid()) {
+                    sol::error err = res;
+                    std::string msg = std::string("[Lua error in on_click] ") + err.what();
+                    EngineLog::Log(msg);
+                    std::fprintf(stderr, "%s\n", msg.c_str());
+                }
+            };
         },
         "on_change", [](UIElement& el, sol::function fn) {
-            el.on_change = [fn](const std::string& s) mutable { fn(s); };
+            el.on_change = [fn](const std::string& s) mutable {
+                auto res = fn(s);
+                if (!res.valid()) {
+                    sol::error err = res;
+                    std::string msg = std::string("[Lua error in on_change] ") + err.what();
+                    EngineLog::Log(msg);
+                    std::fprintf(stderr, "%s\n", msg.c_str());
+                }
+            };
         },
 
-        "add_frame",  &UIElement::AddFrame,
-        "add_button", &UIElement::AddButton,
-        "add_label",  &UIElement::AddLabel,
-        "add_input",  &UIElement::AddInput
+        // Wrappers accept double so that Lua float division results (e.g. WIN_W/2)
+        // are accepted without SOL_ALL_SAFETIES_ON complaining about non-integer floats.
+        "add_frame",  [](UIElement& el, double x, double y, double w, double h) {
+            return el.AddFrame(static_cast<int>(x), static_cast<int>(y),
+                               static_cast<int>(w), static_cast<int>(h));
+        },
+        "add_button", [](UIElement& el, const std::string& text,
+                         double x, double y, double w, double h) {
+            return el.AddButton(text, static_cast<int>(x), static_cast<int>(y),
+                                     static_cast<int>(w), static_cast<int>(h));
+        },
+        "add_label",  [](UIElement& el, const std::string& text, double x, double y) {
+            return el.AddLabel(text, static_cast<int>(x), static_cast<int>(y));
+        },
+        "add_input",  [](UIElement& el, const std::string& placeholder,
+                         double x, double y, double w, double h) {
+            return el.AddInput(placeholder, static_cast<int>(x), static_cast<int>(y),
+                                            static_cast<int>(w), static_cast<int>(h));
+        }
     );
 
     // ── UIScreen ───────────────────────────────────────────────────────────────
@@ -304,10 +335,23 @@ void LuaState::BindAPI() {
         "name",       sol::property(
             [](const UIScreen& s) { return s.name; },
             [](UIScreen& s, const std::string& v) { s.name = v; }),
-        "add_frame",  &UIScreen::AddFrame,
-        "add_button", &UIScreen::AddButton,
-        "add_label",  &UIScreen::AddLabel,
-        "add_input",  &UIScreen::AddInput
+        "add_frame",  [](UIScreen& s, double x, double y, double w, double h) {
+            return s.AddFrame(static_cast<int>(x), static_cast<int>(y),
+                              static_cast<int>(w), static_cast<int>(h));
+        },
+        "add_button", [](UIScreen& s, const std::string& text,
+                         double x, double y, double w, double h) {
+            return s.AddButton(text, static_cast<int>(x), static_cast<int>(y),
+                                     static_cast<int>(w), static_cast<int>(h));
+        },
+        "add_label",  [](UIScreen& s, const std::string& text, double x, double y) {
+            return s.AddLabel(text, static_cast<int>(x), static_cast<int>(y));
+        },
+        "add_input",  [](UIScreen& s, const std::string& placeholder,
+                         double x, double y, double w, double h) {
+            return s.AddInput(placeholder, static_cast<int>(x), static_cast<int>(y),
+                                           static_cast<int>(w), static_cast<int>(h));
+        }
     );
 
     // ── engine global table ────────────────────────────────────────────────────
@@ -320,7 +364,15 @@ void LuaState::BindAPI() {
     };
 
     eng["set_tick_callback"] = [&engine](sol::function fn) {
-        engine.SetTickCallback([fn](double dt) mutable { fn(dt); });
+        engine.SetTickCallback([fn](double dt) mutable {
+            auto res = fn(dt);
+            if (!res.valid()) {
+                sol::error err = res;
+                std::string msg = std::string("[Lua error in tick_callback] ") + err.what();
+                EngineLog::Log(msg);
+                std::fprintf(stderr, "%s\n", msg.c_str());
+            }
+        });
     };
 
     // ── engine.ui table ────────────────────────────────────────────────────────

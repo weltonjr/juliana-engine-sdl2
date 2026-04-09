@@ -9,7 +9,7 @@ height = 720
 
 [ui]
 skin      = "ui/skin.toml"
-font      = "ui/console.ttf"
+font      = "ui/Hack-Regular.ttf"
 font_size = 14
 
 [startup]
@@ -17,4 +17,4 @@ script = "scripts/main.lua"
 
 # Content packages needed for terrain generation (materials, backgrounds)
 [packages]
-load = ["packages/aetherium/base"]
+load = ["packages/aetherium"]

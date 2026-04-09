@@ -7,7 +7,14 @@
       "Bash(cmake --build build)",
       "Bash(ls -la /Users/mainuser/source/juliana-engine-sdl2/build*)",
       "Bash(python3 -m http.server --help)",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(timeout 4 ./build/juliana packages/mapeditor/game)",
+      "Bash(screencapture -x /tmp/game_screen.png)",
+      "Bash(pkill juliana:*)",
+      "Read(//private/tmp/**)",
+      "Bash(./build/juliana packages/mapeditor/game)",
+      "Bash(xargs cat:*)",
+      "Bash(screencapture -x /tmp/game2.png)"
     ]
   }
 }
