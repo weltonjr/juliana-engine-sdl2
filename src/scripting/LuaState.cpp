@@ -299,6 +299,9 @@ void LuaState::BindAPI() {
         "text_left", sol::property(
             [](const UIElement& el) { return el.text_left; },
             [](UIElement& el, bool v) { el.text_left = v; }),
+        "disabled", sol::property(
+            [](const UIElement& el) { return el.disabled; },
+            [](UIElement& el, bool v) { el.disabled = v; }),
 
         "on_click", [](UIElement& el, sol::function fn) {
             el.on_click = [fn]() mutable {
@@ -426,6 +429,63 @@ void LuaState::BindAPI() {
     ter_tbl["get_width"]  = [&engine]() -> int { return engine.GetTerrainWidth(); };
     ter_tbl["get_height"] = [&engine]() -> int { return engine.GetTerrainHeight(); };
 
+    ter_tbl["set_cell"] = [&engine](int x, int y,
+                                     const std::string& mat, const std::string& bg) {
+        engine.SetTerrainCell(x, y, mat, bg);
+    };
+    ter_tbl["get_cell"] = [&lua, &engine](int x, int y) -> sol::table {
+        auto [mat_id, bg_id] = engine.GetTerrainCell(x, y);
+        sol::table t = lua.create_table();
+        t["material_id"]   = mat_id;
+        t["background_id"] = bg_id;
+        return t;
+    };
+
+    // Returns the actual seed used by the most recent generate() call.
+    // When the Lua-side seed was 0, MapGenerator picks a random one internally;
+    // this binding lets Lua recover that value to lock the seed correctly.
+    ter_tbl["get_last_seed"] = [&engine]() -> uint32_t {
+        return engine.GetLastTerrainSeed();
+    };
+
+    // ── engine.registry table ────────────────────────────────────────────────
+    auto reg_tbl = eng.create("registry");
+
+    reg_tbl["get_materials"] = [&lua, &engine]() -> sol::table {
+        sol::table out = lua.create_table();
+        int idx = 1;
+        for (const auto* m : engine.GetRegistry().GetAllMaterials()) {
+            if (!m) continue;
+            sol::table t = lua.create_table();
+            t["id"]   = m->qualified_id;
+            t["name"] = m->name;
+            t["r"]    = static_cast<int>(m->color.r);
+            t["g"]    = static_cast<int>(m->color.g);
+            t["b"]    = static_cast<int>(m->color.b);
+            out[idx++] = t;
+        }
+        return out;
+    };
+
+    reg_tbl["get_backgrounds"] = [&lua, &engine]() -> sol::table {
+        sol::table out = lua.create_table();
+        int idx = 1;
+        int count = static_cast<int>(engine.GetRegistry().GetBackgroundCount());
+        for (int i = 0; i < count; ++i) {
+            const auto* b = engine.GetRegistry().GetBackgroundByRuntimeID(
+                static_cast<BackgroundID>(i));
+            if (!b) continue;
+            sol::table t = lua.create_table();
+            t["id"]   = b->qualified_id;
+            t["name"] = b->name;
+            t["r"]    = static_cast<int>(b->color.r);
+            t["g"]    = static_cast<int>(b->color.g);
+            t["b"]    = static_cast<int>(b->color.b);
+            out[idx++] = t;
+        }
+        return out;
+    };
+
     // ── engine.camera table ───────────────────────────────────────────────────
     auto cam_tbl = eng.create("camera");
 
@@ -450,6 +510,12 @@ void LuaState::BindAPI() {
     inp_tbl["scroll_y"]     = [&engine]() -> int { return engine.GetInput().GetScrollY(); };
     inp_tbl["mouse_button"] = [&engine](int btn) -> bool {
         return engine.GetInput().IsMouseDown(btn);
+    };
+    inp_tbl["mouse_just_pressed"] = [&engine](int btn) -> bool {
+        return engine.GetRaw().IsMouseJustPressed(btn);
+    };
+    inp_tbl["mouse_just_released"] = [&engine](int btn) -> bool {
+        return engine.GetRaw().IsMouseJustReleased(btn);
     };
 
     // ── engine.key constants ──────────────────────────────────────────────────

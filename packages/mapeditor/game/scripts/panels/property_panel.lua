@@ -40,9 +40,10 @@ local function fmt_num(v, is_float)
 end
 
 function M.create(parent_frame, groups, on_change)
-    local values = {}   -- live values: {key = current_value}
-    local inputs = {}   -- UIElement references for input fields: {key = el}
-    local labels = {}   -- value display labels: {key = el}
+    local values   = {}   -- live values: {key = current_value}
+    local inputs   = {}   -- UIElement references for input fields: {key = el}
+    local labels   = {}   -- value display labels: {key = el}
+    local controls = {}   -- all interactive UIElements per key: {key = {el, ...}}
 
     -- Snapshot initial values
     for _, grp in ipairs(groups) do
@@ -88,7 +89,8 @@ function M.create(parent_frame, groups, on_change)
                 local btn_inc = parent_frame:add_button("+",
                     ctrl_x + ctrl_w - BTN_W, y, BTN_W, ROW_H)
 
-                inputs[prop.key] = inp
+                inputs[prop.key]   = inp
+                controls[prop.key] = { btn_dec, inp, btn_inc }
 
                 -- Decrement
                 btn_dec:on_click(function()
@@ -200,6 +202,18 @@ function M.create(parent_frame, groups, on_change)
         end
         -- Refresh enum buttons by firing on_change callbacks won't help here;
         -- the buttons will reflect correct state on next render (text updated above).
+    end
+
+    -- Disable/enable all interactive elements for a given property key
+    function handle.disable_field(key, locked)
+        if controls[key] then
+            for _, el in ipairs(controls[key]) do
+                el.disabled = locked
+            end
+        end
+        if inputs[key] then
+            inputs[key].disabled = locked
+        end
     end
 
     handle.content_height = y  -- expose for scroll calculation

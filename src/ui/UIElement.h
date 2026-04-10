@@ -20,6 +20,7 @@ struct UIElement {
     // Content (used by Button and Label)
     std::string text;
     bool        text_left = false;  // if true, button text is left-aligned with padding
+    bool        disabled  = false;  // if true, input/button is non-interactive and grayed out
 
     // Button interaction
     std::function<void()> on_click;

@@ -107,6 +107,16 @@ function M.build(parent_frame, on_regenerate)
         }
     end
 
+    -- Update the displayed seed value (used to fix seed=0 before locking)
+    function handle.set_seed(v)
+        panel_handle.set_values({ seed = v })
+    end
+
+    -- Lock/unlock the seed field to prevent accidental changes after manual edits
+    function handle.set_seed_locked(locked)
+        panel_handle.disable_field("seed", locked)
+    end
+
     -- Populate panel from a loaded scenario table
     function handle.set_from_scenario(tbl)
         local flat = {}

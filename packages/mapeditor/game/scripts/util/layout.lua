@@ -6,9 +6,10 @@ local M = {}
 M.WIN_W   = 1280
 M.WIN_H   = 720
 M.MENU_H  = 24    -- height of the top menu bar
-M.PANEL_W = 290   -- width of the right-side properties panel
+M.PANEL_W   = 290   -- width of the right-side properties panel
+M.TOOLBAR_W = 96    -- width of the left-side edit toolbar
 
--- Camera pan speed in world pixels per tick (arrow keys / WASD)
+-- Camera pan speed (kept for reference, keyboard pan removed)
 M.CAM_PAN_SPEED = 8.0
 
 -- Scroll pixels per wheel tick when zooming

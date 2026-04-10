@@ -149,7 +149,7 @@ void UISystem::HandleMouseDown(int x, int y) {
     ComputeScreenAbsPositions(screen);
     UIElement* target = FindButtonAtScreen(screen, x, y);
 
-    if (target && target->type == UIElementType::Input) {
+    if (target && target->type == UIElementType::Input && !target->disabled) {
         // Blur previously focused input
         if (focused_input_ && focused_input_ != target) {
             focused_input_->focused = false;
@@ -166,7 +166,7 @@ void UISystem::HandleMouseDown(int x, int y) {
             focused_input_ = nullptr;
             if (text_mode_cb_) text_mode_cb_(false);
         }
-        if (target) {
+        if (target && !target->disabled) {
             target->pressed  = true;
             pressed_element_ = target;
         }
@@ -268,8 +268,9 @@ void UISystem::RenderFrame(const UIElement& el) {
 }
 
 void UISystem::RenderButton(const UIElement& el) {
-    UIColor bg = el.pressed ? skin_.button_pressed
-               : el.hovered ? skin_.button_hover
+    UIColor bg = el.disabled ? skin_.button_pressed  // reuse pressed colour as "dimmed"
+               : el.pressed  ? skin_.button_pressed
+               : el.hovered  ? skin_.button_hover
                : skin_.button_normal;
     DrawFilledRect(el.abs_x, el.abs_y, el.w, el.h, bg);
     DrawRectBorder(el.abs_x, el.abs_y, el.w, el.h, skin_.button_border);
@@ -291,9 +292,12 @@ void UISystem::RenderLabel(const UIElement& el) {
 }
 
 void UISystem::RenderInput(const UIElement& el) {
-    // Background + border
-    DrawFilledRect(el.abs_x, el.abs_y, el.w, el.h, skin_.frame_bg);
-    UIColor border = el.focused ? skin_.input_focus_border : skin_.frame_border;
+    // Background + border — grayed out when disabled
+    UIColor bg     = el.disabled ? skin_.button_pressed : skin_.frame_bg;
+    UIColor border = el.disabled ? skin_.frame_border
+                   : el.focused  ? skin_.input_focus_border
+                   :               skin_.frame_border;
+    DrawFilledRect(el.abs_x, el.abs_y, el.w, el.h, bg);
     DrawRectBorder(el.abs_x, el.abs_y, el.w, el.h, border);
 
     // Draw value or placeholder

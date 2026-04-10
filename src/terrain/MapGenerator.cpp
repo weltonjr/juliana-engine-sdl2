@@ -366,13 +366,15 @@ std::vector<SpawnPosition> MapGenerator::FindSpawnPositions(
     return positions;
 }
 
-Terrain MapGenerator::GenerateFromScenario(const ScenarioDef& scenario, const DefinitionRegistry& registry) {
+Terrain MapGenerator::GenerateFromScenario(const ScenarioDef& scenario, const DefinitionRegistry& registry,
+                                            uint32_t* seed_used_out) {
     int w = scenario.map.width;
     int h = scenario.map.height;
     uint32_t seed = scenario.map.seed;
     if (seed == 0) {
         seed = static_cast<uint32_t>(std::random_device{}());
     }
+    if (seed_used_out) *seed_used_out = seed;
     std::mt19937 rng(seed);
 
     Terrain terrain(w, h);

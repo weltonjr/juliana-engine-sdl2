@@ -134,9 +134,11 @@ void Engine::InitSimulation(const std::string& scenario_path) {
 // ─── Generic terrain generation (no entities/physics) ────────────────────────
 
 void Engine::GenerateTerrain(const ScenarioDef& scenario) {
+    uint32_t seed_used = 0;
     terrain_ = std::make_unique<Terrain>(
-        MapGenerator::GenerateFromScenario(scenario, registry_)
+        MapGenerator::GenerateFromScenario(scenario, registry_, &seed_used)
     );
+    last_terrain_seed_ = seed_used;
 
     // Apply cell overrides (from map editor manual edits)
     for (auto& ov : scenario.overrides) {
@@ -172,6 +174,31 @@ void Engine::GenerateTerrain(const ScenarioDef& scenario) {
 void Engine::UnloadTerrain() {
     terrain_renderer_.reset();
     terrain_.reset();
+}
+
+void Engine::SetTerrainCell(int x, int y,
+                             const std::string& mat_id, const std::string& bg_id) {
+    if (!terrain_ || !terrain_->InBounds(x, y)) return;
+    if (!mat_id.empty()) {
+        const auto* m = registry_.GetMaterial(mat_id);
+        if (m) terrain_->SetMaterial(x, y, m->runtime_id);
+    }
+    if (!bg_id.empty()) {
+        const auto* b = registry_.GetBackground(bg_id);
+        if (b) terrain_->SetBackground(x, y, b->runtime_id);
+    }
+    if (terrain_renderer_) terrain_renderer_->UpdateRegion(x, y, 1, 1);
+}
+
+std::pair<std::string, std::string> Engine::GetTerrainCell(int x, int y) const {
+    if (!terrain_ || !terrain_->InBounds(x, y)) return {"", ""};
+    auto cell = terrain_->GetCell(x, y);
+    const auto* m = registry_.GetMaterialByRuntimeID(cell.material_id);
+    const auto* b = registry_.GetBackgroundByRuntimeID(cell.background_id);
+    return {
+        m ? m->qualified_id : "",
+        b ? b->qualified_id : ""
+    };
 }
 
 const InputSystem&  Engine::GetRaw()   const { return input_->GetRaw(); }

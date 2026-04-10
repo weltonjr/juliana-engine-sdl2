@@ -13,7 +13,10 @@ struct SpawnPosition {
 
 class MapGenerator {
 public:
-    static Terrain GenerateFromScenario(const ScenarioDef& scenario, const DefinitionRegistry& registry);
+    // seed_used_out — if non-null, receives the actual seed used (may differ from
+    // scenario.map.seed when seed==0, in which case a random seed is generated).
+    static Terrain GenerateFromScenario(const ScenarioDef& scenario, const DefinitionRegistry& registry,
+                                        uint32_t* seed_used_out = nullptr);
 
     // Find spawn positions for player slots
     static std::vector<SpawnPosition> FindSpawnPositions(

@@ -58,6 +58,14 @@ public:
     int  GetTerrainWidth()  const { return terrain_ ? terrain_->GetWidth()  : 0; }
     int  GetTerrainHeight() const { return terrain_ ? terrain_->GetHeight() : 0; }
 
+    // Per-cell terrain editing (for the map editor paint tools)
+    void SetTerrainCell(int x, int y, const std::string& mat_id, const std::string& bg_id);
+    std::pair<std::string, std::string> GetTerrainCell(int x, int y) const;
+
+    // Returns the actual seed used by the last GenerateTerrain call.
+    // When the scenario seed was 0, MapGenerator picked a random one — this returns that value.
+    uint32_t GetLastTerrainSeed() const { return last_terrain_seed_; }
+
     // Camera accessors for Lua
     float GetCameraX()    const { return cameras_.empty() ? 0.f : cameras_[0]->GetX(); }
     float GetCameraY()    const { return cameras_.empty() ? 0.f : cameras_[0]->GetY(); }
@@ -124,6 +132,8 @@ private:
     std::unique_ptr<PhysicsSystem>    physics_;
     std::unique_ptr<TerrainSimulator> terrain_sim_;
     std::unique_ptr<DebugUI>          debug_ui_;
+
+    uint32_t last_terrain_seed_ = 0;  // actual seed used by last GenerateTerrain call
 
     std::unordered_map<std::string, ActionMap> action_maps_;
     std::vector<EntityID> controllable_entities_;
