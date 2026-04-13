@@ -11,6 +11,9 @@
 
 class DefinitionRegistry {
 public:
+    // Register built-in materials and backgrounds (always available, "base:" prefix)
+    void RegisterBuiltins();
+
     // Registration (called by PackageLoader)
     MaterialID RegisterMaterial(std::unique_ptr<MaterialDef> def);
     BackgroundID RegisterBackground(std::unique_ptr<BackgroundDef> def);

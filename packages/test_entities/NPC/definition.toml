@@ -1,0 +1,23 @@
+[object]
+id = "NPC"
+name = "NPC"
+category = ["Living", "NPC"]
+aspects = []
+player_controllable = false
+
+[physics]
+mode = "dynamic"
+mass = 60
+max_fall_speed = 400.0
+size = [12, 24]
+solid = false
+overlap_detection = true
+step_up = 4
+
+[visual]
+color = [50, 180, 80]
+
+[properties]
+hp = 50
+patrol = 1
+dialog_id = 0

@@ -90,7 +90,7 @@ void GameLoop::Run(Engine& engine) {
         fps_timer += frame_time;
         frame_count++;
         if (fps_timer >= 1.0) {
-            // TODO: show FPS on top right of screen
+            actual_fps_ = frame_count;
             frame_count = 0;
             fps_timer -= 1.0;
         }

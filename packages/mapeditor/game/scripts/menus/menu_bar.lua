@@ -1,4 +1,4 @@
--- Top menu bar: File / Edit / Scenario / About
+-- Top menu bar: File / Edit / Scenario / View / About
 -- Creates a full-width 24px bar with dropdown menus.
 --
 -- Usage:
@@ -11,6 +11,7 @@
 --   on_undo     = fn(),   on_redo    = fn(),
 --   on_about    = fn(),
 --   toggle_panel = fn(),  -- show/hide properties panel
+--   on_stats    = fn(),   -- open stats dialog
 -- }
 
 local layout = require("util/layout")
@@ -25,6 +26,7 @@ local MENU_DEFS = {
     { label = "File",     w = 52  },
     { label = "Edit",     w = 52  },
     { label = "Scenario", w = 80  },
+    { label = "View",     w = 52  },
     { label = "About",    w = 60  },
 }
 
@@ -81,7 +83,13 @@ function M.build(screen, actions)
         elseif menu.label == "Scenario" then
             dd_w = 110
             items = {
-                { label = "Properties", fn = actions.toggle_panel },
+                { label = "Settings", fn = actions.toggle_panel },
+            }
+        elseif menu.label == "View" then
+            dd_w = 130
+            items = {
+                { label = "Properties Panel", fn = actions.toggle_panel },
+                { label = "Stats...",         fn = actions.on_stats     },
             }
         elseif menu.label == "About" then
             dd_w = 150

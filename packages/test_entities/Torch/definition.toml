@@ -1,0 +1,19 @@
+[object]
+id = "Torch"
+name = "Torch"
+category = ["Prop", "Light"]
+aspects = []
+player_controllable = false
+
+[physics]
+mode = "static"
+size = [8, 16]
+solid = false
+overlap_detection = false
+
+[visual]
+sprite = "sprite.png"
+color = [255, 200, 50]
+
+[properties]
+light_radius = 48

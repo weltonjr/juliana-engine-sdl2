@@ -59,7 +59,7 @@ if(EMSCRIPTEN)
     set(LUA_INCLUDE_DIR "${lua_src_SOURCE_DIR}")
 else()
     list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew" "/usr/local")
-    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/lib/cmake/SDL2" "/opt/homebrew/lib/cmake/SDL2_ttf")
+    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/lib/cmake/SDL2" "/opt/homebrew/lib/cmake/SDL2_ttf" "/opt/homebrew/lib/cmake/SDL2_image")
     # Lua 5.4 via Homebrew (brew install lua@5.4)
     list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/lua@5.4" "/opt/homebrew/opt/lua")
     # Windows/MSYS2 ucrt64
@@ -67,6 +67,7 @@ else()
 
     find_package(SDL2 REQUIRED)
     find_package(SDL2_ttf REQUIRED)
+    find_package(SDL2_image REQUIRED)
 
     find_package(Lua 5.4)
     if(NOT Lua_FOUND)
@@ -107,6 +108,8 @@ if(EMSCRIPTEN)
     target_compile_options(${PROJECT_NAME} PRIVATE
         -sUSE_SDL=2
         -sUSE_SDL_TTF=2
+        -sUSE_SDL_IMAGE=2
+        -sSDL2_IMAGE_FORMATS='["png"]'
         # Enable C++ exceptions so sol2 and toml++ work correctly.
         -fexceptions
     )
@@ -114,6 +117,8 @@ if(EMSCRIPTEN)
     target_link_options(${PROJECT_NAME} PRIVATE
         -sUSE_SDL=2
         -sUSE_SDL_TTF=2
+        -sUSE_SDL_IMAGE=2
+        -sSDL2_IMAGE_FORMATS='["png"]'
         -sALLOW_MEMORY_GROWTH=1
         -sWASM=1
         # Full POSIX filesystem API (needed for std::filesystem and Lua file I/O).
@@ -128,6 +133,7 @@ else()
     target_link_libraries(${PROJECT_NAME} PRIVATE
         SDL2::SDL2
         SDL2_ttf::SDL2_ttf
+        SDL2_image::SDL2_image
     )
 
     if(APPLE)

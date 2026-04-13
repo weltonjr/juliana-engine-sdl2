@@ -2,12 +2,19 @@
 #include "core/EngineLog.h"
 #include "game/GameLoader.h"
 #include "input/InputAction.h"
+#include <SDL_image.h>
 #include <cmath>
 #include <cstdio>
 #include <array>
 
 Engine::Engine() = default;
-Engine::~Engine() = default;
+
+Engine::~Engine() {
+    for (auto& [path, tex] : sprite_cache_) {
+        if (tex) SDL_DestroyTexture(tex);
+    }
+    sprite_cache_.clear();
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
@@ -41,7 +48,9 @@ void Engine::Init(const std::string& game_path) {
         else    input_->StopTextInput();
     });
 
-    // 5. Load content packages declared by the game definition
+    // 5. Register built-in materials/backgrounds, then load content packages
+    registry_.RegisterBuiltins();
+
     if (!game_def_.packages.empty()) {
         PackageLoader loader(registry_);
         for (const auto& pkg : game_def_.packages)
@@ -204,6 +213,162 @@ std::pair<std::string, std::string> Engine::GetTerrainCell(int x, int y) const {
 const InputSystem&  Engine::GetRaw()   const { return input_->GetRaw(); }
 const InputManager& Engine::GetInput() const { return *input_; }
 
+// ─── Stats ────────────────────────────────────────────────────────────────────
+
+int Engine::GetFPS() const {
+    return game_loop_ ? game_loop_->GetActualFPS() : 0;
+}
+
+int Engine::GetNonAirCellCount() const {
+    if (!terrain_) return 0;
+    const auto* air = registry_.GetMaterial("base:Air");
+    MaterialID air_id = air ? air->runtime_id : 0;
+    int count = 0;
+    for (int y = 0; y < terrain_->GetHeight(); ++y)
+        for (int x = 0; x < terrain_->GetWidth(); ++x)
+            if (terrain_->GetCell(x, y).material_id != air_id) ++count;
+    return count;
+}
+
+// ─── Bresenham line tracer ────────────────────────────────────────────────────
+
+std::vector<std::pair<int,int>> Engine::TraceLine(int x0, int y0, int x1, int y1) const {
+    std::vector<std::pair<int,int>> pts;
+    int dx =  std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy;
+    for (;;) {
+        pts.push_back({x0, y0});
+        if (x0 == x1 && y0 == y1) break;
+        int e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+    return pts;
+}
+
+// ─── PaintLine ───────────────────────────────────────────────────────────────
+
+std::vector<int> Engine::PaintLine(int x0, int y0, int x1, int y1,
+                                    const std::string& mat_id, const std::string& bg_id,
+                                    int brush_size) {
+    if (!terrain_) return {};
+
+    // Resolve IDs once
+    MaterialID   m_id   = 0;
+    BackgroundID b_id   = 0;
+    bool         has_mat = false, has_bg = false;
+
+    if (!mat_id.empty()) {
+        const auto* m = registry_.GetMaterial(mat_id);
+        if (m) { m_id = m->runtime_id; has_mat = true; }
+    }
+    if (!bg_id.empty()) {
+        const auto* b = registry_.GetBackground(bg_id);
+        if (b) { b_id = b->runtime_id; has_bg = true; }
+    }
+
+    int half  = brush_size / 2;
+    int W     = terrain_->GetWidth();
+    int H     = terrain_->GetHeight();
+
+    // Bounding box of entire stroke (for single UpdateRegion call)
+    int bb_x0 = INT_MAX, bb_y0 = INT_MAX, bb_x1 = INT_MIN, bb_y1 = INT_MIN;
+
+    std::vector<int> cells; // flat [x, y, x, y, ...]
+
+    // Bresenham walk
+    int dx =  std::abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -std::abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy;
+    int cx = x0, cy = y0;
+    for (;;) {
+        // Paint brush square around (cx, cy)
+        for (int bx = cx - half; bx <= cx - half + brush_size - 1; ++bx) {
+            for (int by = cy - half; by <= cy - half + brush_size - 1; ++by) {
+                if (bx < 0 || by < 0 || bx >= W || by >= H) continue;
+                if (has_mat) terrain_->SetMaterial(bx, by, m_id);
+                if (has_bg)  terrain_->SetBackground(bx, by, b_id);
+                cells.push_back(bx);
+                cells.push_back(by);
+                if (bx < bb_x0) bb_x0 = bx;
+                if (by < bb_y0) bb_y0 = by;
+                if (bx > bb_x1) bb_x1 = bx;
+                if (by > bb_y1) bb_y1 = by;
+            }
+        }
+        if (cx == x1 && cy == y1) break;
+        int e2 = 2 * err;
+        if (e2 >= dy) { err += dy; cx += sx; }
+        if (e2 <= dx) { err += dx; cy += sy; }
+    }
+
+    // Single renderer update for the whole stroke
+    if (terrain_renderer_ && bb_x0 != INT_MAX) {
+        terrain_renderer_->UpdateRegion(bb_x0, bb_y0,
+                                        bb_x1 - bb_x0 + 1,
+                                        bb_y1 - bb_y0 + 1);
+    }
+
+    return cells;
+}
+
+// ─── Editor world-space markers ───────────────────────────────────────────────
+
+void Engine::SetEditorMarkers(std::vector<WorldMarker> markers) {
+    editor_markers_ = std::move(markers);
+}
+
+SDL_Texture* Engine::LoadSprite(const std::string& path) {
+    auto it = sprite_cache_.find(path);
+    if (it != sprite_cache_.end()) return it->second;
+
+    SDL_Texture* tex = IMG_LoadTexture(window_->GetRenderer(), path.c_str());
+    if (!tex) {
+        std::fprintf(stderr, "Failed to load sprite '%s': %s\n", path.c_str(), IMG_GetError());
+    }
+    sprite_cache_[path] = tex;  // cache even if null to avoid repeated load attempts
+    return tex;
+}
+
+void Engine::DrawWorldMarkers(const std::vector<WorldMarker>& markers) {
+    if (cameras_.empty() || !terrain_renderer_) return;
+    SDL_Renderer* r = window_->GetRenderer();
+    float scale = cameras_[0]->GetScale();
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    for (const auto& m : markers) {
+        int sx, sy;
+        cameras_[0]->WorldToScreen(m.wx, m.wy, sx, sy);
+        SDL_Rect dst = { sx, sy,
+                         static_cast<int>(m.w * scale),
+                         static_cast<int>(m.h * scale) };
+
+        // Try to render sprite if one is specified
+        SDL_Texture* sprite = nullptr;
+        if (!m.sprite_path.empty()) {
+            sprite = LoadSprite(m.sprite_path);
+        }
+
+        if (sprite) {
+            SDL_RenderCopy(r, sprite, nullptr, &dst);
+        } else {
+            // Fallback: translucent colored rect
+            SDL_SetRenderDrawColor(r, m.r, m.g, m.b, 130);
+            SDL_RenderFillRect(r, &dst);
+            // Solid border
+            SDL_SetRenderDrawColor(r, m.r, m.g, m.b, 255);
+            SDL_RenderDrawRect(r, &dst);
+        }
+
+        // White selection outline
+        if (m.selected) {
+            SDL_Rect ol = { dst.x - 1, dst.y - 1, dst.w + 2, dst.h + 2 };
+            SDL_SetRenderDrawColor(r, 255, 255, 255, 255);
+            SDL_RenderDrawRect(r, &ol);
+        }
+    }
+}
+
 // ─── Run ──────────────────────────────────────────────────────────────────────
 
 void Engine::Run() {
@@ -321,6 +486,11 @@ void Engine::Render(double alpha) {
     if (terrain_renderer_) {
         terrain_renderer_->Render(r, *cameras_[0]);
     }
+    // Editor entity markers rendered between terrain and UI
+    if (!sim_running_ && !editor_markers_.empty()) {
+        DrawWorldMarkers(editor_markers_);
+    }
+
     if (sim_running_) {
         RenderEntities(r, alpha);
         debug_ui_->Render(r);

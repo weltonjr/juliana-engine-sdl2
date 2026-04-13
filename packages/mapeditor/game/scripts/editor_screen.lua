@@ -3,7 +3,7 @@
 --
 -- Layout:
 --   [Top menu bar — 24px full width]
---   [Edit toolbar 48px left | Terrain viewport | Properties panel 290px right]
+--   [Edit toolbar 96px left | Terrain viewport | Properties panel 290px right]
 
 local layout        = require("util/layout")
 local MenuBar       = require("menus/menu_bar")
@@ -11,6 +11,8 @@ local ScenarioPanel = require("panels/scenario_panel")
 local EditToolbar   = require("panels/edit_toolbar")
 local FileDialog    = require("menus/file_dialog")
 local AboutDialog   = require("menus/about_dialog")
+local StatsDialog   = require("menus/stats_dialog")
+local EntityPopup   = require("panels/entity_popup")
 
 local WIN_W    = layout.WIN_W
 local WIN_H    = layout.WIN_H
@@ -25,10 +27,14 @@ local state = {
     current_path   = nil,    -- nil = new, string = loaded from file
     scenario_tbl   = nil,    -- last saved/loaded scenario table
     overrides      = {},     -- {x,y,material_id,background_id} applied post-gen
+    overrides_index= {},     -- [x*65536+y] → index in overrides (O(1) upsert)
+    entities       = {},     -- {def_id,x,y,size_w,size_h,r,g,b,props} editor placements
+    selected_entity_idx = nil,
     panel_visible  = true,
     panel_handle   = nil,
     toolbar_handle = nil,
     menu_bar_ctrl  = nil,
+    tooltip_label  = nil,
     -- Camera drag
     drag_prev_x    = nil,
     drag_prev_y    = nil,
@@ -37,16 +43,43 @@ local state = {
     locked_seed    = nil,
     -- Rect tool
     rect_start     = nil,
+    -- Brush line fill
+    last_paint_wx  = nil,
+    last_paint_wy  = nil,
+    -- Panel lock
+    panel_locked   = false,
+    panel_frame    = nil,
+    -- Pointer tool drag
+    ptr_drag_idx    = nil,
+    ptr_drag_off_wx = 0,
+    ptr_drag_off_wy = 0,
+    ptr_drag_moved  = false,
+    ptr_start_mx    = 0,
+    ptr_start_my    = 0,
 }
 
 -- ─── Reset transient state ────────────────────────────────────────────────────
 
 local function reset_state()
-    state.seed_locked  = false
-    state.locked_seed  = nil
-    state.rect_start   = nil
-    state.drag_prev_x  = nil
-    state.drag_prev_y  = nil
+    state.seed_locked         = false
+    state.locked_seed         = nil
+    state.rect_start          = nil
+    state.drag_prev_x         = nil
+    state.drag_prev_y         = nil
+    state.last_paint_wx       = nil
+    state.last_paint_wy       = nil
+    state.overrides           = {}
+    state.overrides_index     = {}
+    state.entities            = {}
+    state.selected_entity_idx = nil
+    state.panel_locked        = false
+    state.ptr_drag_idx        = nil
+    state.ptr_drag_off_wx     = 0
+    state.ptr_drag_off_wy     = 0
+    state.ptr_drag_moved      = false
+    state.ptr_start_mx        = 0
+    state.ptr_start_my        = 0
+    engine.editor.clear_markers()
 end
 
 -- ─── Save helpers ─────────────────────────────────────────────────────────────
@@ -54,7 +87,27 @@ end
 local function do_save(path)
     if not path or path == "" then return end
     local tbl = state.panel_handle.get_scenario_table()
-    tbl.overrides = state.overrides
+
+    -- Compact override storage (binary palette + base64)
+    if #state.overrides > 0 then
+        tbl.overrides_v2 = engine.overrides.encode(state.overrides)
+    end
+    -- (no legacy overrides key — new format only)
+
+    -- Entity placements
+    if #state.entities > 0 then
+        local ent_list = {}
+        for _, ent in ipairs(state.entities) do
+            ent_list[#ent_list + 1] = {
+                def   = ent.def_id,
+                x     = ent.x,
+                y     = ent.y,
+                props = ent.props,
+            }
+        end
+        tbl.entities = ent_list
+    end
+
     local ok = engine.fs.write_text(path, engine.json.encode(tbl))
     if ok then
         engine.log("Saved: " .. path)
@@ -97,7 +150,6 @@ end
 -- ─── Generate terrain ─────────────────────────────────────────────────────────
 
 local function generate(map_config)
-    -- If seed is locked, force the fixed seed regardless of panel value
     if state.seed_locked and state.locked_seed then
         map_config.seed = state.locked_seed
     end
@@ -116,33 +168,189 @@ local function screen_to_world(sx, sy)
     return math.floor(wx), math.floor(wy)
 end
 
+-- O(1) channel-selective upsert using an index table keyed by x*65536+y.
+-- When mat_id or bg_id is "", that channel is left unchanged on existing overrides.
 local function upsert_override(x, y, mat_id, bg_id)
-    for _, ov in ipairs(state.overrides) do
-        if ov.x == x and ov.y == y then
-            ov.material_id   = mat_id
-            ov.background_id = bg_id
-            return
+    local k   = x * 65536 + y
+    local idx = state.overrides_index[k]
+    if idx then
+        local ov = state.overrides[idx]
+        if mat_id ~= "" then ov.material_id   = mat_id end
+        if bg_id  ~= "" then ov.background_id = bg_id  end
+    else
+        local n = #state.overrides + 1
+        state.overrides[n] = { x = x, y = y, material_id = mat_id, background_id = bg_id }
+        state.overrides_index[k] = n
+    end
+end
+
+-- Batch-upsert from a flat C++ paint_line result {x0,y0,x1,y1,...}
+local function upsert_overrides_flat(flat, mat_id, bg_id)
+    local i = 1
+    local n = #flat
+    while i <= n do
+        local x, y = flat[i], flat[i+1]
+        i = i + 2
+        local k   = x * 65536 + y
+        local idx = state.overrides_index[k]
+        if idx then
+            local ov = state.overrides[idx]
+            if mat_id ~= "" then ov.material_id   = mat_id end
+            if bg_id  ~= "" then ov.background_id = bg_id  end
+        else
+            local ni = #state.overrides + 1
+            state.overrides[ni] = { x = x, y = y, material_id = mat_id, background_id = bg_id }
+            state.overrides_index[k] = ni
         end
     end
-    state.overrides[#state.overrides + 1] =
-        { x = x, y = y, material_id = mat_id, background_id = bg_id }
+end
+
+-- Lock the scenario panel and close it on first terrain/entity edit
+local function lock_panel_if_needed()
+    if state.panel_locked then return end
+    state.panel_locked = true
+    if state.panel_handle then
+        state.panel_handle.lock_panel()
+    end
+    if state.panel_frame then
+        state.panel_visible = false
+        state.panel_frame.visible = false
+    end
 end
 
 local function lock_seed()
     if state.seed_locked then return end
-    -- Ask the engine for the actual seed used by the last generate() call.
-    -- When the user left the seed field at 0, MapGenerator picked a random
-    -- seed internally; engine.terrain.get_last_seed() returns that exact value
-    -- so future regenerations reproduce the identical base terrain.
     local seed = engine.terrain.get_last_seed()
-    if seed == 0 then seed = 1 end   -- safety: shouldn't happen after generate
+    if seed == 0 then seed = 1 end
     state.seed_locked = true
     state.locked_seed = seed
     if state.panel_handle then
         state.panel_handle.set_seed(seed)
         state.panel_handle.set_seed_locked(true)
     end
+    lock_panel_if_needed()
     engine.log("Seed locked at " .. tostring(seed))
+end
+
+-- ─── Entity helpers ───────────────────────────────────────────────────────────
+
+local ENTITY_SELECT_THRESHOLD_PX = 20
+
+local function find_nearest_entity(sx, sy)
+    local best_idx  = nil
+    local best_dist = ENTITY_SELECT_THRESHOLD_PX * ENTITY_SELECT_THRESHOLD_PX
+    local z = engine.camera.get_zoom()
+    for i, ent in ipairs(state.entities) do
+        local ecx = ent.x + (ent.size_w or 12) * 0.5
+        local ecy = ent.y + (ent.size_h or 20) * 0.5
+        local esx = (ecx - engine.camera.get_x()) * z
+        local esy = (ecy - engine.camera.get_y()) * z
+        local dx, dy = sx - esx, sy - esy
+        local d2 = dx*dx + dy*dy
+        if d2 < best_dist then
+            best_dist = d2
+            best_idx  = i
+        end
+    end
+    return best_idx
+end
+
+local function push_entity_markers()
+    if not engine.terrain.is_loaded() then
+        engine.editor.clear_markers()
+        return
+    end
+    local markers = {}
+    for i, ent in ipairs(state.entities) do
+        markers[#markers + 1] = {
+            wx       = ent.x,
+            wy       = ent.y,
+            w        = ent.size_w or 12,
+            h        = ent.size_h or 20,
+            r        = ent.r or 200,
+            g        = ent.g or 200,
+            b        = ent.b or 200,
+            selected = (i == state.selected_entity_idx),
+            sprite   = ent.sprite_path or "",
+        }
+    end
+    engine.editor.set_markers(markers)
+end
+
+-- Entity popup lifecycle
+local function close_entity_popup()
+    state.selected_entity_idx = nil
+end
+
+local function get_def_props(def_id)
+    for _, obj in ipairs(engine.registry.get_objects()) do
+        if obj.id == def_id then return obj.props or {} end
+    end
+    return {}
+end
+
+local function open_entity_popup(idx)
+    local ent = state.entities[idx]
+    if not ent then return end
+    state.selected_entity_idx = idx
+    local def_props = get_def_props(ent.def_id)
+    EntityPopup.show(ent, def_props, function()
+        state.selected_entity_idx = nil
+    end)
+end
+
+-- Load entity list from a saved scenario table
+local function load_entities_from_tbl(tbl)
+    state.entities = {}
+    if not tbl.entities then return end
+    local all_objs = engine.registry.get_objects()
+    local function find_obj(def_id)
+        for _, obj in ipairs(all_objs) do
+            if obj.id == def_id then return obj end
+        end
+        return nil
+    end
+    for _, e in ipairs(tbl.entities) do
+        local def = find_obj(e.def)
+        if not def then
+            engine.log("WARN: entity def not found: " .. tostring(e.def))
+        end
+        state.entities[#state.entities + 1] = {
+            def_id      = e.def,
+            x           = e.x or 0,
+            y           = e.y or 0,
+            size_w      = def and def.size_w or 12,
+            size_h      = def and def.size_h or 20,
+            r           = def and def.r or 200,
+            g           = def and def.g or 200,
+            b           = def and def.b or 200,
+            sprite_path = def and def.sprite_path or "",
+            props       = e.props or {},
+        }
+    end
+end
+
+-- Rebuild the O(1) index from the overrides array (called after loading from disk)
+local function rebuild_overrides_index()
+    state.overrides_index = {}
+    for i, ov in ipairs(state.overrides) do
+        state.overrides_index[ov.x * 65536 + ov.y] = i
+    end
+end
+
+-- Load overrides (handles both v2 compact and legacy formats)
+local function load_overrides_from_tbl(tbl)
+    if tbl.overrides_v2 then
+        local decoded = engine.overrides.decode(tbl.overrides_v2)
+        if decoded then
+            state.overrides = decoded
+            rebuild_overrides_index()
+            return
+        end
+        engine.log("WARN: overrides_v2 decode failed, trying legacy")
+    end
+    state.overrides = tbl.overrides or {}
+    rebuild_overrides_index()
 end
 
 -- ─── Tick callback ────────────────────────────────────────────────────────────
@@ -186,71 +394,229 @@ local function register_tick()
             else save_dialog() end
         end
 
-        -- ── Paint tools ───────────────────────────────────────────────────────
-        if not engine.terrain.is_loaded() then return end
+        -- ── Paint / entity tools ──────────────────────────────────────────────
+        if not engine.terrain.is_loaded() then
+            push_entity_markers()
+            return
+        end
 
         local panel_right = WIN_W - (state.panel_visible and PANEL_W or 0)
         local in_viewport = (mx > TOOLBAR_W and mx < panel_right and my > MENU_H)
-        if not in_viewport then return end
+
+        -- ── Tooltip (always update while terrain loaded) ───────────────────────
+        if state.tooltip_label then
+            if in_viewport then
+                local wx, wy = screen_to_world(mx, my)
+                local cell   = engine.terrain.get_cell(wx, wy)
+                local tip    = (cell and cell.material_id ~= "") and cell.material_id or ""
+                -- Also show nearby entity
+                local eidx   = find_nearest_entity(mx, my)
+                if eidx then
+                    local ename = state.entities[eidx].def_id or ""
+                    tip = (tip ~= "") and (tip .. " | " .. ename) or ename
+                end
+                state.tooltip_label.text = tip
+                state.tooltip_label.x    = mx + 14
+                state.tooltip_label.y    = my - 4
+            else
+                state.tooltip_label.text = ""
+            end
+        end
+
+        if not in_viewport then
+            push_entity_markers()
+            return
+        end
 
         local tool   = state.toolbar_handle and state.toolbar_handle.get_tool() or "brush"
-        local mat    = state.toolbar_handle and state.toolbar_handle.get_tool() ~= "eraser"
-                       and state.toolbar_handle.get_material() or nil
+        local mat    = (tool ~= "eraser" and tool ~= "add_entity"
+                        and tool ~= "rem_entity" and tool ~= "pointer")
+                       and state.toolbar_handle and state.toolbar_handle.get_material() or nil
         local bsize  = state.toolbar_handle and state.toolbar_handle.get_brush_size() or 1
-        local half   = math.floor(bsize / 2)
 
         local lmb       = engine.input.mouse_button(1)
         local lmb_press = engine.input.mouse_just_pressed(1)
         local lmb_rel   = engine.input.mouse_just_released(1)
 
-        -- Helper: paint a bsize×bsize square centred on (cx, cy)
-        local function paint_brush(cx, cy, mat_id, bg_id)
-            for dx = -half, bsize - 1 - half do
-                for dy = -half, bsize - 1 - half do
-                    local rx, ry = cx + dx, cy + dy
-                    engine.terrain.set_cell(rx, ry, mat_id, bg_id)
-                    upsert_override(rx, ry, mat_id, bg_id)
-                end
+        -- Clear last paint position on release
+        if lmb_rel then
+            state.last_paint_wx = nil
+            state.last_paint_wy = nil
+        end
+
+        -- ── Ctrl+LMB: select entity (works with any tool) ─────────────────────
+        if ctrl and lmb_press then
+            local eidx = find_nearest_entity(mx, my)
+            if eidx then
+                open_entity_popup(eidx)
+                push_entity_markers()
+                return
             end
         end
 
-        if tool == "brush" and lmb and mat then
+        -- Helper: paint a Bresenham stroke (or single point) in one C++ call.
+        -- engine.terrain.paint_line handles Bresenham + brush + one UpdateRegion.
+        -- Returns a flat {x0,y0,x1,y1,...} array for override batch-upsert.
+        local function do_paint(wx, wy, mat_id, bg_id)
+            local flat
+            if state.last_paint_wx ~= nil then
+                flat = engine.terrain.paint_line(
+                    state.last_paint_wx, state.last_paint_wy, wx, wy,
+                    mat_id, bg_id, bsize)
+            else
+                flat = engine.terrain.paint_line(wx, wy, wx, wy,
+                    mat_id, bg_id, bsize)
+            end
+            upsert_overrides_flat(flat, mat_id, bg_id)
+            state.last_paint_wx = wx
+            state.last_paint_wy = wy
+        end
+
+        -- ── Pointer tool ──────────────────────────────────────────────────────
+        if tool == "pointer" then
+            if lmb_press then
+                local eidx = find_nearest_entity(mx, my)
+                state.ptr_start_mx   = mx
+                state.ptr_start_my   = my
+                state.ptr_drag_moved = false
+                if eidx then
+                    local ent = state.entities[eidx]
+                    local cwx, cwy = screen_to_world(mx, my)
+                    state.ptr_drag_idx    = eidx
+                    state.ptr_drag_off_wx = cwx - ent.x
+                    state.ptr_drag_off_wy = cwy - ent.y
+                    state.selected_entity_idx = eidx
+                else
+                    state.ptr_drag_idx        = nil
+                    state.selected_entity_idx = nil
+                end
+            end
+
+            if lmb and state.ptr_drag_idx then
+                local ddx = mx - state.ptr_start_mx
+                local ddy = my - state.ptr_start_my
+                if ddx*ddx + ddy*ddy > 25 then state.ptr_drag_moved = true end
+                if state.ptr_drag_moved then
+                    local cwx, cwy = screen_to_world(mx, my)
+                    local ent = state.entities[state.ptr_drag_idx]
+                    ent.x = cwx - state.ptr_drag_off_wx
+                    ent.y = cwy - state.ptr_drag_off_wy
+                end
+            end
+
+            if lmb_rel then
+                local eidx = state.ptr_drag_idx
+                if eidx and not state.ptr_drag_moved then
+                    -- Click (no drag) on already-selected entity → open property popup
+                    if state.selected_entity_idx == eidx then
+                        open_entity_popup(eidx)
+                    end
+                end
+                state.ptr_drag_idx   = nil
+                state.ptr_drag_moved = false
+            end
+
+        -- ── Terrain tools ─────────────────────────────────────────────────────
+        elseif tool == "brush" and lmb then
             local wx, wy = screen_to_world(mx, my)
-            paint_brush(wx, wy, mat.id, "")
-            lock_seed()
+            local layer  = state.toolbar_handle and state.toolbar_handle.get_layer() or "fg"
+            if layer == "fg" and mat then
+                do_paint(wx, wy, mat.id, "")
+                lock_seed()
+            elseif layer == "bg" then
+                local bg = state.toolbar_handle and state.toolbar_handle.get_bg_def()
+                if bg then
+                    do_paint(wx, wy, "", bg.id)
+                    lock_seed()
+                end
+            end
 
         elseif tool == "eraser" and lmb then
             local wx, wy = screen_to_world(mx, my)
-            local bg_id  = state.toolbar_handle and state.toolbar_handle.get_background()
-                           or "base:Sky"
-            paint_brush(wx, wy, "base:Air", bg_id)
+            local layer  = state.toolbar_handle and state.toolbar_handle.get_layer() or "fg"
+            if layer == "fg" then
+                do_paint(wx, wy, "base:Air", "base:Sky")
+            else
+                do_paint(wx, wy, "", "base:Sky")
+            end
             lock_seed()
 
         elseif tool == "rect" then
             if lmb_press then
                 local wx, wy = screen_to_world(mx, my)
                 state.rect_start = { x = wx, y = wy }
-            elseif lmb_rel and state.rect_start and mat then
+            elseif lmb_rel and state.rect_start then
                 local wx, wy = screen_to_world(mx, my)
+                local layer  = state.toolbar_handle and state.toolbar_handle.get_layer() or "fg"
                 local x0 = math.min(state.rect_start.x, wx)
                 local x1 = math.max(state.rect_start.x, wx)
                 local y0 = math.min(state.rect_start.y, wy)
                 local y1 = math.max(state.rect_start.y, wy)
-                for rx = x0, x1 do
-                    for ry = y0, y1 do
-                        engine.terrain.set_cell(rx, ry, mat.id, "")
-                        upsert_override(rx, ry, mat.id, "")
+                if layer == "fg" and mat then
+                    for rx = x0, x1 do
+                        for ry = y0, y1 do
+                            engine.terrain.set_cell(rx, ry, mat.id, "")
+                            upsert_override(rx, ry, mat.id, "")
+                        end
+                    end
+                    engine.log("Rect: " .. mat.name .. " " ..
+                        (x1-x0+1) .. "x" .. (y1-y0+1))
+                    lock_seed()
+                elseif layer == "bg" then
+                    local bg = state.toolbar_handle and state.toolbar_handle.get_bg_def()
+                    if bg then
+                        for rx = x0, x1 do
+                            for ry = y0, y1 do
+                                engine.terrain.set_cell(rx, ry, "", bg.id)
+                                upsert_override(rx, ry, "", bg.id)
+                            end
+                        end
+                        engine.log("Rect BG: " .. bg.name .. " " ..
+                            (x1-x0+1) .. "x" .. (y1-y0+1))
+                        lock_seed()
                     end
                 end
-                engine.log("Rect: " .. mat.name .. " " ..
-                    (x1-x0+1) .. "x" .. (y1-y0+1))
-                lock_seed()
                 state.rect_start = nil
             elseif not lmb then
-                -- Cancel rect if button released outside viewport
                 state.rect_start = nil
             end
+
+        -- ── Entity tools ──────────────────────────────────────────────────────
+        elseif tool == "add_entity" and lmb_press then
+            local def = state.toolbar_handle and state.toolbar_handle.get_entity_def()
+            if def then
+                local wx, wy = screen_to_world(mx, my)
+                state.entities[#state.entities + 1] = {
+                    def_id      = def.id,
+                    x           = wx,
+                    y           = wy,
+                    size_w      = def.size_w,
+                    size_h      = def.size_h,
+                    r           = def.r,
+                    g           = def.g,
+                    b           = def.b,
+                    sprite_path = def.sprite_path or "",
+                    props       = {},
+                }
+                lock_panel_if_needed()
+                engine.log("Placed: " .. def.id .. " at " .. wx .. "," .. wy)
+            end
+
+        elseif tool == "rem_entity" and lmb_press then
+            local eidx = find_nearest_entity(mx, my)
+            if eidx then
+                if state.selected_entity_idx == eidx then
+                    close_entity_popup()
+                elseif state.selected_entity_idx and state.selected_entity_idx > eidx then
+                    state.selected_entity_idx = state.selected_entity_idx - 1
+                end
+                table.remove(state.entities, eidx)
+                lock_panel_if_needed()
+                engine.log("Removed entity #" .. eidx)
+            end
         end
+
+        push_entity_markers()
     end)
 end
 
@@ -265,6 +631,7 @@ local function build_editor_screen(initial_tbl)
 
     -- Properties panel (right side)
     local panel_frame = screen:add_frame(WIN_W - PANEL_W, MENU_H, PANEL_W, WIN_H - MENU_H)
+    state.panel_frame = panel_frame
     local panel_handle = ScenarioPanel.build(panel_frame, function(map_config)
         generate(map_config)
     end)
@@ -273,6 +640,9 @@ local function build_editor_screen(initial_tbl)
     if initial_tbl then
         panel_handle.set_from_scenario(initial_tbl)
     end
+
+    -- Tooltip label — floats near the mouse cursor
+    state.tooltip_label = screen:add_label("", 0, 0)
 
     -- Menu bar (built last — renders on top)
     local actions = {
@@ -293,6 +663,7 @@ local function build_editor_screen(initial_tbl)
         on_save_as  = save_dialog,
         on_quit = function()
             engine.terrain.unload()
+            engine.editor.clear_markers()
             engine.ui.pop_screen()
         end,
         on_undo = function() engine.log("Undo — not yet implemented") end,
@@ -302,6 +673,7 @@ local function build_editor_screen(initial_tbl)
             panel_frame.visible = state.panel_visible
         end,
         on_about = function() AboutDialog.show() end,
+        on_stats = function() StatsDialog.show(state) end,
     }
 
     state.menu_bar_ctrl = MenuBar.build(screen, actions)
@@ -340,13 +712,13 @@ function M.load_from_path(path)
 
     state.current_path = path
     state.scenario_tbl = tbl
-    state.overrides    = tbl.overrides or {}
     reset_state()
+    load_overrides_from_tbl(tbl)
+    load_entities_from_tbl(tbl)
 
     -- If the editor is already open, update panel + regenerate in place
     if state.panel_handle then
         state.panel_handle.set_from_scenario(tbl)
-        -- Re-lock seed if the loaded map had overrides
         if #state.overrides > 0 then
             state.locked_seed = tbl.map and tbl.map.seed or 0
             state.seed_locked = true
@@ -362,13 +734,13 @@ end
 
 function M.open_new_with_data(tbl)
     state.scenario_tbl  = tbl
-    state.overrides     = tbl.overrides or {}
     state.panel_visible = true
     reset_state()
+    load_overrides_from_tbl(tbl)
+    load_entities_from_tbl(tbl)
 
     local panel_handle = build_editor_screen(tbl)
 
-    -- Pre-lock seed if the loaded map already has overrides
     if #state.overrides > 0 then
         state.locked_seed = tbl.map and tbl.map.seed or 0
         state.seed_locked = true

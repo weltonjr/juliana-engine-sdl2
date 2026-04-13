@@ -66,6 +66,33 @@ public:
     // When the scenario seed was 0, MapGenerator picked a random one — this returns that value.
     uint32_t GetLastTerrainSeed() const { return last_terrain_seed_; }
 
+    // Stats
+    int GetFPS() const;
+    int GetNonAirCellCount() const;
+
+    // Bresenham line tracer — returns all integer cell coords on the line from (x0,y0) to (x1,y1).
+    std::vector<std::pair<int,int>> TraceLine(int x0, int y0, int x1, int y1) const;
+
+    // Paint a Bresenham stroke with a square brush in a single C++ call.
+    // Resolves mat/bg IDs once, paints every cell along the line, issues ONE
+    // UpdateRegion call for the entire bounding box.
+    // Returns every painted cell as a flat [x0,y0,x1,y1,...] vector so Lua can
+    // update the override map without calling back into C++ per cell.
+    std::vector<int> PaintLine(int x0, int y0, int x1, int y1,
+                                const std::string& mat_id, const std::string& bg_id,
+                                int brush_size);
+
+    // ── Editor world-space marker rendering ──────────────────────────────────────
+    // Markers are pushed by Lua each tick and drawn between terrain and UI.
+    struct WorldMarker {
+        float wx = 0, wy = 0;
+        int   w  = 12, h = 20;
+        uint8_t r = 200, g = 200, b = 200;
+        bool selected = false;
+        std::string sprite_path;  // optional — rendered instead of colored rect
+    };
+    void SetEditorMarkers(std::vector<WorldMarker> markers);
+
     // Camera accessors for Lua
     float GetCameraX()    const { return cameras_.empty() ? 0.f : cameras_[0]->GetX(); }
     float GetCameraY()    const { return cameras_.empty() ? 0.f : cameras_[0]->GetY(); }
@@ -89,6 +116,9 @@ public:
     const DefinitionRegistry& GetRegistry() const { return registry_; }
 
 private:
+    // --- Editor overlay ---
+    void DrawWorldMarkers(const std::vector<WorldMarker>& markers);
+
     // --- Gameplay helpers (only called when sim_running_) ---
     void UpdatePlayerControl(Entity& entity, double dt);
     void UpdateCameraFollow(Camera& cam, const Entity& target);
@@ -134,6 +164,11 @@ private:
     std::unique_ptr<DebugUI>          debug_ui_;
 
     uint32_t last_terrain_seed_ = 0;  // actual seed used by last GenerateTerrain call
+    std::vector<WorldMarker> editor_markers_;   // pushed by Lua each tick
+
+    // Sprite texture cache for editor markers
+    std::unordered_map<std::string, SDL_Texture*> sprite_cache_;
+    SDL_Texture* LoadSprite(const std::string& path);
 
     std::unordered_map<std::string, ActionMap> action_maps_;
     std::vector<EntityID> controllable_entities_;

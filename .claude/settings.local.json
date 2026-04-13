@@ -14,7 +14,10 @@
       "Read(//private/tmp/**)",
       "Bash(./build/juliana packages/mapeditor/game)",
       "Bash(xargs cat:*)",
-      "Bash(screencapture -x /tmp/game2.png)"
+      "Bash(screencapture -x /tmp/game2.png)",
+      "Bash(ls /Users/mainuser/source/juliana-engine-sdl2/packages/test_entities/*/definition.toml)",
+      "Bash(brew list:*)",
+      "Bash(brew install:*)"
     ]
   }
 }

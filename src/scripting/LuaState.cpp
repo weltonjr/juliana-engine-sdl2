@@ -593,4 +593,205 @@ void LuaState::BindAPI() {
             return JsonToLua(json::parse(str), lua);
         } catch (...) { return sol::nil; }
     };
+
+    // ── engine.terrain additions ──────────────────────────────────────────────
+
+    ter_tbl["trace_line"] = [&lua, &engine](int x0, int y0, int x1, int y1) -> sol::table {
+        auto pts = engine.TraceLine(x0, y0, x1, y1);
+        sol::table out = lua.create_table();
+        for (int i = 0; i < static_cast<int>(pts.size()); ++i) {
+            sol::table p = lua.create_table();
+            p["x"] = pts[i].first;
+            p["y"] = pts[i].second;
+            out[i + 1] = p;
+        }
+        return out;
+    };
+
+    // paint_line: does Bresenham + brush painting entirely in C++.
+    // Returns a flat Lua array {x0,y0,x1,y1,...} of every cell painted so
+    // Lua can update the override map in one O(N) pass — no nested tables,
+    // no per-cell C++ boundary crossing, one UpdateRegion for the whole stroke.
+    ter_tbl["paint_line"] = [&lua, &engine](int x0, int y0, int x1, int y1,
+                                             const std::string& mat_id,
+                                             const std::string& bg_id,
+                                             int brush_size) -> sol::table {
+        auto flat = engine.PaintLine(x0, y0, x1, y1, mat_id, bg_id, brush_size);
+        sol::table out = lua.create_table(static_cast<int>(flat.size()), 0);
+        for (int i = 0; i < static_cast<int>(flat.size()); ++i)
+            out[i + 1] = flat[i];
+        return out;
+    };
+
+    // ── engine.registry additions ─────────────────────────────────────────────
+
+    reg_tbl["get_objects"] = [&lua, &engine]() -> sol::table {
+        sol::table out = lua.create_table();
+        int idx = 1;
+        for (const auto& [qid, obj_ptr] : engine.GetRegistry().GetAllObjects()) {
+            if (!obj_ptr) continue;
+            sol::table t = lua.create_table();
+            t["id"]     = obj_ptr->qualified_id;
+            t["name"]   = obj_ptr->name;
+            t["size_w"] = obj_ptr->size_w;
+            t["size_h"] = obj_ptr->size_h;
+            t["r"]      = static_cast<int>(obj_ptr->color.r);
+            t["g"]      = static_cast<int>(obj_ptr->color.g);
+            t["b"]      = static_cast<int>(obj_ptr->color.b);
+            t["sprite_path"] = obj_ptr->sprite_path;
+            sol::table props = lua.create_table();
+            for (const auto& [k, v] : obj_ptr->properties) props[k] = v;
+            t["props"] = props;
+            out[idx++] = t;
+        }
+        return out;
+    };
+
+    // ── engine.editor table ───────────────────────────────────────────────────
+
+    auto edit_tbl = eng.create("editor");
+
+    edit_tbl["set_markers"] = [&engine](sol::table markers) {
+        std::vector<Engine::WorldMarker> list;
+        for (auto& [_, v] : markers) {
+            if (v.get_type() != sol::type::table) continue;
+            sol::table m = v.as<sol::table>();
+            Engine::WorldMarker wm;
+            wm.wx       = m.get_or("wx", 0.0f);
+            wm.wy       = m.get_or("wy", 0.0f);
+            wm.w        = m.get_or("w",  12);
+            wm.h        = m.get_or("h",  20);
+            wm.r        = static_cast<uint8_t>(m.get_or("r", 200));
+            wm.g        = static_cast<uint8_t>(m.get_or("g", 200));
+            wm.b        = static_cast<uint8_t>(m.get_or("b", 200));
+            wm.selected     = m.get_or("selected", false);
+            wm.sprite_path  = m.get_or<std::string>("sprite", "");
+            list.push_back(wm);
+        }
+        engine.SetEditorMarkers(std::move(list));
+    };
+
+    edit_tbl["clear_markers"] = [&engine]() {
+        engine.SetEditorMarkers({});
+    };
+
+    // ── engine stats ──────────────────────────────────────────────────────────
+
+    eng["get_fps"]              = [&engine]() -> int { return engine.GetFPS(); };
+    eng["get_solid_cell_count"] = [&engine]() -> int { return engine.GetNonAirCellCount(); };
+
+    // ── engine.overrides table (compact binary+base64 encoding) ───────────────
+
+    // Base64 alphabet
+    static const char B64[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    auto b64_encode = [](const std::vector<uint8_t>& data) -> std::string {
+        std::string out;
+        out.reserve(((data.size() + 2) / 3) * 4);
+        for (size_t i = 0; i < data.size(); i += 3) {
+            uint32_t b = static_cast<uint32_t>(data[i]) << 16;
+            if (i + 1 < data.size()) b |= static_cast<uint32_t>(data[i+1]) << 8;
+            if (i + 2 < data.size()) b |= static_cast<uint32_t>(data[i+2]);
+            out += B64[(b >> 18) & 0x3F];
+            out += B64[(b >> 12) & 0x3F];
+            out += (i + 1 < data.size()) ? B64[(b >> 6) & 0x3F] : '=';
+            out += (i + 2 < data.size()) ? B64[(b     ) & 0x3F] : '=';
+        }
+        return out;
+    };
+
+    auto b64_decode = [](const std::string& s) -> std::vector<uint8_t> {
+        auto val = [](char c) -> int {
+            if (c >= 'A' && c <= 'Z') return c - 'A';
+            if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+            if (c >= '0' && c <= '9') return c - '0' + 52;
+            if (c == '+') return 62;
+            if (c == '/') return 63;
+            return -1;
+        };
+        std::vector<uint8_t> out;
+        out.reserve(s.size() * 3 / 4);
+        for (size_t i = 0; i + 3 < s.size(); i += 4) {
+            int a = val(s[i]), b = val(s[i+1]), c = val(s[i+2]), d = val(s[i+3]);
+            if (a < 0 || b < 0) break;
+            out.push_back(static_cast<uint8_t>((a << 2) | (b >> 4)));
+            if (c >= 0) out.push_back(static_cast<uint8_t>((b << 4) | (c >> 2)));
+            if (d >= 0) out.push_back(static_cast<uint8_t>((c << 6) |  d));
+        }
+        return out;
+    };
+
+    auto ov_tbl = eng.create("overrides");
+
+    // encode(lua_override_list) → JSON string (overrides_v2 format)
+    // Each override: {x, y, material_id, background_id}
+    // Wire format: uint16 x, uint16 y, uint8 mat_idx, uint8 bg_idx → 6 bytes/cell
+    ov_tbl["encode"] = [b64_encode](sol::table overrides) -> std::string {
+        // Build palettes
+        std::vector<std::string> mat_pal, bg_pal;
+        auto pal_idx = [](std::vector<std::string>& pal, const std::string& s) -> uint8_t {
+            for (size_t i = 0; i < pal.size(); ++i)
+                if (pal[i] == s) return static_cast<uint8_t>(i);
+            pal.push_back(s);
+            return static_cast<uint8_t>(pal.size() - 1);
+        };
+
+        // Pre-scan
+        for (auto& [_, v] : overrides) {
+            if (v.get_type() != sol::type::table) continue;
+            sol::table ov = v.as<sol::table>();
+            pal_idx(mat_pal, ov.get_or<std::string>("material_id", ""));
+            pal_idx(bg_pal,  ov.get_or<std::string>("background_id", ""));
+        }
+
+        // Build binary blob
+        std::vector<uint8_t> blob;
+        for (auto& [_, v] : overrides) {
+            if (v.get_type() != sol::type::table) continue;
+            sol::table ov = v.as<sol::table>();
+            int x = ov.get_or("x", 0);
+            int y = ov.get_or("y", 0);
+            uint8_t mi = pal_idx(mat_pal, ov.get_or<std::string>("material_id", ""));
+            uint8_t bi = pal_idx(bg_pal,  ov.get_or<std::string>("background_id", ""));
+            blob.push_back(static_cast<uint8_t>(x & 0xFF));
+            blob.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
+            blob.push_back(static_cast<uint8_t>(y & 0xFF));
+            blob.push_back(static_cast<uint8_t>((y >> 8) & 0xFF));
+            blob.push_back(mi);
+            blob.push_back(bi);
+        }
+
+        json j;
+        j["mat_palette"] = mat_pal;
+        j["bg_palette"]  = bg_pal;
+        j["data"]        = b64_encode(blob);
+        return j.dump();
+    };
+
+    // decode(json_string) → lua override list
+    ov_tbl["decode"] = [&lua, b64_decode](const std::string& s) -> sol::object {
+        try {
+            json j = json::parse(s);
+            auto mat_pal = j["mat_palette"].get<std::vector<std::string>>();
+            auto bg_pal  = j["bg_palette"].get<std::vector<std::string>>();
+            auto blob    = b64_decode(j["data"].get<std::string>());
+
+            sol::table out = lua.create_table();
+            int idx = 1;
+            for (size_t i = 0; i + 5 < blob.size(); i += 6) {
+                int x = blob[i]   | (blob[i+1] << 8);
+                int y = blob[i+2] | (blob[i+3] << 8);
+                uint8_t mi = blob[i+4];
+                uint8_t bi = blob[i+5];
+                sol::table ov = lua.create_table();
+                ov["x"]           = x;
+                ov["y"]           = y;
+                ov["material_id"] = (mi < mat_pal.size()) ? mat_pal[mi] : "";
+                ov["background_id"]=(bi < bg_pal.size())  ? bg_pal[bi]  : "";
+                out[idx++] = ov;
+            }
+            return out;
+        } catch (...) { return sol::nil; }
+    };
 }

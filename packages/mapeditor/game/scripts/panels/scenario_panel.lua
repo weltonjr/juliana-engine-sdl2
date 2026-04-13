@@ -13,15 +13,13 @@ local M = {}
 local DEFAULT_MATERIALS = {
     { id = "base:Air",   rule = "above_surface" },
     { id = "base:Dirt",  rule = "surface_layer", depth = 30 },
-    { id = "base:Rock",  rule = "deep",          min_depth = 60 },
-    { id = "base:Rock",  rule = "fill" },
+    { id = "base:Dirt",  rule = "deep",          min_depth = 60 },
+    { id = "base:Dirt",  rule = "fill" },
 }
 
 -- Default feature set
 local DEFAULT_FEATURES = {
     { type = "caves",     density = 0.05, min_size = 10, max_size = 40 },
-    { type = "ore_veins", material = "base:GoldOre", zone = "rock",
-      density = 0.03, vein_radius = 8 },
 }
 
 -- Build the property groups definition.
@@ -87,6 +85,22 @@ function M.build(parent_frame, on_regenerate)
     end)
 
     local handle = {}
+    local locked = false
+
+    -- Lock all controls and Generate button (called after first terrain/entity edit)
+    function handle.lock_panel()
+        if locked then return end
+        locked = true
+        panel_handle.disable_all(true)
+        gen_btn.disabled = true
+    end
+
+    -- Unlock (used when opening a new map or loading a file)
+    function handle.unlock_panel()
+        locked = false
+        panel_handle.disable_all(false)
+        gen_btn.disabled = false
+    end
 
     -- Assemble a map config table from current panel values
     function handle.get_config()

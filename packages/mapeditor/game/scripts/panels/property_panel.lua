@@ -216,6 +216,13 @@ function M.create(parent_frame, groups, on_change)
         end
     end
 
+    -- Disable/enable ALL property controls at once
+    function handle.disable_all(locked)
+        for key, _ in pairs(values) do
+            handle.disable_field(key, locked)
+        end
+    end
+
     handle.content_height = y  -- expose for scroll calculation
 
     return handle
