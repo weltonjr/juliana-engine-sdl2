@@ -58,17 +58,24 @@ void LogConsole::RenderLine(SDL_Renderer* renderer, const std::string& text, int
 }
 
 void LogConsole::Render(SDL_Renderer* renderer) {
-    int win_w, win_h;
-    SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
+    int win_w = 0, win_h = 0;
+    SDL_RenderGetLogicalSize(renderer, &win_w, &win_h);
+    // Some backends return 0 (or tiny values) here; fallback so panel always shows.
+    if (win_w < 100 || win_h < 100) {
+        SDL_GetRendererOutputSize(renderer, &win_w, &win_h);
+    }
 
     const int margin   = 10;
     const int padding  = 8;
     const int line_h   = 16;
     const int header_h = 22;
 
-    int px = margin, py = margin;
-    int pw = win_w - margin * 2;
-    int ph = win_h - margin * 2;
+    int px = margin;
+    int pw = std::max(1, win_w - margin * 2);
+    int ph = win_h / 3;
+    ph = std::max(ph, header_h + padding * 2 + line_h);
+    ph = std::min(ph, std::max(1, win_h - margin * 2));
+    int py = std::max(margin, win_h - margin - ph);
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
