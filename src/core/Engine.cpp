@@ -166,6 +166,16 @@ void Engine::GenerateTerrain(const ScenarioDef& scenario) {
     );
     terrain_renderer_->FullRebuild();
 
+    // Create terrain simulator for editor (so sand/water/gas can be tested).
+    // Always build a fresh simulator — the previous one (if any) is bound to
+    // the old terrain's dimensions, and regenerating could change them.
+    // Start paused — user must click 1x/2x/etc. in the Simulation menu to run it.
+    terrain_sim_ = std::make_unique<TerrainSimulator>(registry_);
+    terrain_sim_accumulator_ = 0.0;
+    if (!sim_running_) {
+        sim_time_scale_ = 0.0f;
+    }
+
     // Centre camera on the terrain
     if (!cameras_.empty()) {
         float cx = (terrain_->GetWidth()  - cameras_[0]->GetViewWorldWidth())  / 2.0f;
@@ -183,6 +193,12 @@ void Engine::GenerateTerrain(const ScenarioDef& scenario) {
 void Engine::UnloadTerrain() {
     terrain_renderer_.reset();
     terrain_.reset();
+    // Drop the simulator too: its overlays (chunk_active_, mass_, processed_)
+    // are sized to the old terrain dimensions. Leaving a stale sim around
+    // causes out-of-bounds writes if the next terrain has different dims and
+    // the user paints before the first Update() re-scans.
+    terrain_sim_.reset();
+    terrain_sim_accumulator_ = 0.0;
 }
 
 void Engine::SetTerrainCell(int x, int y,
@@ -197,6 +213,10 @@ void Engine::SetTerrainCell(int x, int y,
         if (b) terrain_->SetBackground(x, y, b->runtime_id);
     }
     if (terrain_renderer_) terrain_renderer_->UpdateRegion(x, y, 1, 1);
+    if (terrain_sim_) {
+        terrain_sim_->NotifyModified(x, y, 1, 1);
+        terrain_sim_->InitMassRegion(*terrain_, x, y, 1, 1);
+    }
 }
 
 std::pair<std::string, std::string> Engine::GetTerrainCell(int x, int y) const {
@@ -304,10 +324,16 @@ std::vector<int> Engine::PaintLine(int x0, int y0, int x1, int y1,
     }
 
     // Single renderer update for the whole stroke
-    if (terrain_renderer_ && bb_x0 != INT_MAX) {
-        terrain_renderer_->UpdateRegion(bb_x0, bb_y0,
-                                        bb_x1 - bb_x0 + 1,
-                                        bb_y1 - bb_y0 + 1);
+    if (bb_x0 != INT_MAX) {
+        int rw = bb_x1 - bb_x0 + 1;
+        int rh = bb_y1 - bb_y0 + 1;
+        if (terrain_renderer_) {
+            terrain_renderer_->UpdateRegion(bb_x0, bb_y0, rw, rh);
+        }
+        if (terrain_sim_) {
+            terrain_sim_->NotifyModified(bb_x0, bb_y0, rw, rh);
+            terrain_sim_->InitMassRegion(*terrain_, bb_x0, bb_y0, rw, rh);
+        }
     }
 
     return cells;
@@ -400,6 +426,19 @@ void Engine::SimTick(double dt) {
     // Per-tick Lua callback (editor camera, shortcuts, etc.)
     if (tick_callback_) tick_callback_(dt);
 
+    // Terrain simulation runs in both editor and gameplay modes (when time_scale > 0)
+    if (terrain_sim_ && terrain_ && sim_time_scale_ > 0.0f) {
+        terrain_sim_accumulator_ += static_cast<double>(sim_time_scale_);
+        while (terrain_sim_accumulator_ >= 1.0) {
+            terrain_sim_->Update(*terrain_);
+            if (terrain_sim_->HasChanges() && terrain_renderer_) {
+                for (auto& rect : terrain_sim_->GetDirtyRects())
+                    terrain_renderer_->UpdateRegion(rect.x, rect.y, rect.w, rect.h);
+            }
+            terrain_sim_accumulator_ -= 1.0;
+        }
+    }
+
     if (!sim_running_) return;
 
     // ── Gameplay simulation (only when a scenario is loaded) ──────────────────
@@ -458,6 +497,7 @@ void Engine::SimTick(double dt) {
                     int drh = player->dig_radius * 2 + 3;
                     terrain_renderer_->UpdateRegion(drx, dry, drw, drh);
                     terrain_sim_->NotifyModified(drx, dry, drw, drh);
+                    terrain_sim_->InitMassRegion(*terrain_, drx, dry, drw, drh);
                 }
             }
         }
@@ -467,17 +507,6 @@ void Engine::SimTick(double dt) {
     AdvanceActions(scaled_dt);
 
     if (player) UpdateCameraFollow(*cameras_[0], *player);
-
-    // Terrain sim is tick-based — use accumulator to scale its rate
-    terrain_sim_accumulator_ += static_cast<double>(sim_time_scale_);
-    while (terrain_sim_accumulator_ >= 1.0) {
-        terrain_sim_->Update(*terrain_);
-        if (terrain_sim_->HasChanges()) {
-            for (auto& rect : terrain_sim_->GetDirtyRects())
-                terrain_renderer_->UpdateRegion(rect.x, rect.y, rect.w, rect.h);
-        }
-        terrain_sim_accumulator_ -= 1.0;
-    }
 
     debug_ui_->Update(input_->GetMouseX(), input_->GetMouseY(),
                       *cameras_[0], *terrain_, registry_, player);

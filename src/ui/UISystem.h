@@ -34,6 +34,11 @@ public:
 
     bool HasActiveScreen() const { return !screen_stack_.empty(); }
 
+    // Returns true if (x, y) lies over an interactive UI element (Button/Input)
+    // on the top screen. Useful for preventing game-world clicks from leaking
+    // through the UI (e.g. painting the map while clicking a menu button).
+    bool IsPointOverUI(int x, int y);
+
     // --- Input (call after InputManager::PollEvents) ---
     void HandleMouseMove (int x, int y);
     void HandleMouseDown (int x, int y);

@@ -7,7 +7,8 @@ enum class MaterialState {
     None,
     Solid,
     Powder,
-    Liquid
+    Liquid,
+    Gas
 };
 
 struct MaterialDef {
@@ -33,6 +34,9 @@ struct MaterialDef {
     int blast_resistance = 20;
     int flow_rate = 0;
     float liquid_drag = 0.0f;
+    int rise_rate = 0;
+    int dispersion = 0;
+    int lifetime = 0;
     std::string dig_product;
     std::string small_fragment;
     int min_fragment_pixels = 8;

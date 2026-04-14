@@ -1,0 +1,20 @@
+[material]
+id = "Smoke"
+name = "Smoke"
+
+[physics]
+state = "gas"
+density = 3
+friction = 0.0
+hardness = 0
+
+[visual]
+color = [80, 80, 80]
+transparency = 0.6
+color_variation = 10
+
+[behavior]
+gravity = false
+rise_rate = 1
+dispersion = 2
+lifetime = 80

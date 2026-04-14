@@ -69,6 +69,7 @@ public:
     // Stats
     int GetFPS() const;
     int GetNonAirCellCount() const;
+    TerrainSimulator* GetTerrainSimulator() const { return terrain_sim_.get(); }
 
     // Bresenham line tracer — returns all integer cell coords on the line from (x0,y0) to (x1,y1).
     std::vector<std::pair<int,int>> TraceLine(int x0, int y0, int x1, int y1) const;

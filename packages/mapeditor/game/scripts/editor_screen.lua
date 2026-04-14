@@ -364,6 +364,9 @@ local function register_tick()
         local mx = engine.input.mouse_x()
         local my = engine.input.mouse_y()
 
+        -- Refresh the live stats HUD (no-op when hidden)
+        if state.stats_hud then state.stats_hud.update(dt) end
+
         -- ── Right-click drag: camera pan ──────────────────────────────────────
         local rmb = engine.input.mouse_button(3)
         if rmb then
@@ -412,6 +415,12 @@ local function register_tick()
 
         local panel_right = WIN_W - (state.panel_visible and PANEL_W or 0)
         local in_viewport = (mx > TOOLBAR_W and mx < panel_right and my > MENU_H)
+        -- Suppress paint / entity tools when the cursor is over an interactive
+        -- UI element (open menu dropdown, popup dialog button, etc.) so that
+        -- clicking a menu entry doesn't also paint the map underneath it.
+        if in_viewport and engine.ui.is_mouse_over() then
+            in_viewport = false
+        end
 
         -- ── Tooltip (always update while terrain loaded) ───────────────────────
         if state.tooltip_label then
@@ -651,6 +660,10 @@ local function build_editor_screen(initial_tbl)
         panel_handle.set_from_scenario(initial_tbl)
     end
 
+    -- Stats HUD — non-modal, top-right corner panel. Hidden by default; toggled
+    -- by the View → Stats menu entry. Refreshed per-tick from register_tick().
+    state.stats_hud = StatsDialog.build(screen, state)
+
     -- Tooltip label — floats near the mouse cursor
     state.tooltip_label = screen:add_label("", 0, 0)
 
@@ -690,7 +703,7 @@ local function build_editor_screen(initial_tbl)
             engine.log("Simulation speed: " .. (s == 0 and "Paused" or (s .. "x")))
         end,
         on_about = function() AboutDialog.show() end,
-        on_stats = function() StatsDialog.show(state) end,
+        on_stats = function() if state.stats_hud then state.stats_hud.toggle() end end,
     }
 
     state.menu_bar_ctrl = MenuBar.build(screen, actions)

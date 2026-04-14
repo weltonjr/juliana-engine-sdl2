@@ -105,6 +105,7 @@ void PackageLoader::ParseMaterial(const std::string& file_path, const std::strin
         if (state_str == "solid") def->state = MaterialState::Solid;
         else if (state_str == "powder") def->state = MaterialState::Powder;
         else if (state_str == "liquid") def->state = MaterialState::Liquid;
+        else if (state_str == "gas") def->state = MaterialState::Gas;
         else def->state = MaterialState::None;
 
         def->density = phys["density"].value_or(100);
@@ -133,6 +134,9 @@ void PackageLoader::ParseMaterial(const std::string& file_path, const std::strin
         def->blast_resistance = beh["blast_resistance"].value_or(20);
         def->flow_rate = beh["flow_rate"].value_or(0);
         def->liquid_drag = beh["liquid_drag"].value_or(0.0f);
+        def->rise_rate = beh["rise_rate"].value_or(0);
+        def->dispersion = beh["dispersion"].value_or(0);
+        def->lifetime = beh["lifetime"].value_or(0);
         def->dig_product = beh["dig_product"].value_or<std::string>("");
         def->small_fragment = beh["small_fragment"].value_or<std::string>("");
         def->min_fragment_pixels = beh["min_fragment_pixels"].value_or(8);

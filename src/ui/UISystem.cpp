@@ -111,6 +111,13 @@ UIElement* UISystem::FindButtonAtScreen(UIScreen& screen, int mx, int my) {
     return nullptr;
 }
 
+bool UISystem::IsPointOverUI(int x, int y) {
+    if (screen_stack_.empty()) return false;
+    UIScreen& screen = *screen_stack_.back();
+    ComputeScreenAbsPositions(screen);
+    return FindButtonAtScreen(screen, x, y) != nullptr;
+}
+
 void UISystem::ClearButtonStates(UIElement& el) {
     el.hovered = false;
     el.pressed  = false;

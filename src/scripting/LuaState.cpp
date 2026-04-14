@@ -405,6 +405,13 @@ void LuaState::BindAPI() {
     ui_tbl["pop_screen"] = [&ui]() {
         ui.PopScreen();
     };
+    // Returns true if the current mouse position is over an interactive UI
+    // element on the top screen. Scripts should use this to suppress world
+    // clicks (e.g. map painting) when the user is interacting with UI.
+    ui_tbl["is_mouse_over"] = [&ui, &engine]() -> bool {
+        return ui.IsPointOverUI(engine.GetInput().GetMouseX(),
+                                engine.GetInput().GetMouseY());
+    };
 
     // ── engine.terrain table ───────────────────────────────────────────────────
     auto ter_tbl = eng.create("terrain");
@@ -512,6 +519,14 @@ void LuaState::BindAPI() {
     auto sim_tbl = eng.create("sim");
     sim_tbl["get_time_scale"] = [&engine]() -> float { return engine.GetSimTimeScale(); };
     sim_tbl["set_time_scale"] = [&engine](float s) { engine.SetSimTimeScale(s); };
+    sim_tbl["get_active_chunks"] = [&engine]() -> int {
+        auto* s = engine.GetTerrainSimulator();
+        return s ? s->GetActiveChunkCount() : 0;
+    };
+    sim_tbl["get_total_chunks"] = [&engine]() -> int {
+        auto* s = engine.GetTerrainSimulator();
+        return s ? s->GetTotalChunkCount() : 0;
+    };
 
     // ── engine.input table ────────────────────────────────────────────────────
     auto inp_tbl = eng.create("input");

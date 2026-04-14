@@ -1,0 +1,20 @@
+[material]
+id = "Steam"
+name = "Steam"
+
+[physics]
+state = "gas"
+density = 5
+friction = 0.0
+hardness = 0
+
+[visual]
+color = [200, 200, 220]
+transparency = 0.7
+color_variation = 8
+
+[behavior]
+gravity = false
+rise_rate = 2
+dispersion = 3
+lifetime = 120

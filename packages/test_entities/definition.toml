@@ -1,5 +1,0 @@
-[package]
-id = "test"
-name = "Test Entities"
-version = "0.1.0"
-description = "Editor test entity definitions — add sprites later"

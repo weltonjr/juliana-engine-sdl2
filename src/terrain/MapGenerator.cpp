@@ -99,7 +99,8 @@ std::vector<int> MapGenerator::GenerateBowlShape(int width, int height, std::mt1
 
 void MapGenerator::AssignMaterials(Terrain& terrain, const std::vector<int>& surface,
                                     const std::vector<MaterialRule>& rules,
-                                    const DefinitionRegistry& registry) {
+                                    const DefinitionRegistry& registry,
+                                    int sea_level_y) {
     int w = terrain.GetWidth();
     int h = terrain.GetHeight();
 
@@ -131,8 +132,9 @@ void MapGenerator::AssignMaterials(Terrain& terrain, const std::vector<int>& sur
 
                 if (rule.rule == "above_surface" && !is_solid) {
                     match = true;
-                } else if (rule.rule == "below_sea_level_and_empty" && !is_solid) {
-                    // Not implemented yet (need sea_level param)
+                } else if (rule.rule == "below_sea_level_and_empty" && !is_solid &&
+                           sea_level_y > 0 && y >= sea_level_y) {
+                    match = true;
                 } else if (rule.rule == "surface_layer" && is_solid && depth_from_surface < rule.depth) {
                     match = true;
                 } else if (rule.rule == "deep" && is_solid && depth_from_surface >= rule.min_depth) {
@@ -392,8 +394,11 @@ Terrain MapGenerator::GenerateFromScenario(const ScenarioDef& scenario, const De
     }
 
     // Pass 2: Assign materials using rules
+    float sea_level_frac = scenario.map.shape_params.Get("sea_level", -1.0f);
+    int sea_level_y = (sea_level_frac > 0.0f) ? static_cast<int>(h * sea_level_frac) : -1;
+
     if (!scenario.map.materials.empty()) {
-        AssignMaterials(terrain, surface, scenario.map.materials, registry);
+        AssignMaterials(terrain, surface, scenario.map.materials, registry, sea_level_y);
     } else {
         // Fallback: basic material assignment
         auto* air = registry.GetMaterial("base:Air");
