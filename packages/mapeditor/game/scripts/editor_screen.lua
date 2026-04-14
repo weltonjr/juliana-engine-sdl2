@@ -378,12 +378,22 @@ local function register_tick()
             state.drag_prev_x, state.drag_prev_y = nil, nil
         end
 
-        -- ── Scroll wheel zoom ─────────────────────────────────────────────────
+        -- ── Scroll wheel zoom (toward mouse position) ────────────────────────
         local scroll = engine.input.scroll_y()
         if scroll ~= 0 then
-            local z = engine.camera.get_zoom()
-            z = math.max(ZMIN, math.min(ZMAX, z + scroll * ZSTEP))
-            engine.camera.set_zoom(z)
+            local old_z = engine.camera.get_zoom()
+            local new_z = math.max(ZMIN, math.min(ZMAX, old_z + scroll * ZSTEP))
+            if new_z ~= old_z then
+                local wx = engine.camera.get_x() + mx / old_z
+                local wy = engine.camera.get_y() + my / old_z
+                engine.camera.set_zoom(new_z)
+                engine.camera.set_position(wx - mx / new_z, wy - my / new_z)
+            end
+        end
+
+        -- ── Backtick: toggle log console ──────────────────────────────────────
+        if engine.input.is_key_just_pressed(engine.key.GRAVE) then
+            engine.log_console.toggle()
         end
 
         -- ── Ctrl+S save ───────────────────────────────────────────────────────
@@ -671,6 +681,13 @@ local function build_editor_screen(initial_tbl)
         toggle_panel = function()
             state.panel_visible = not state.panel_visible
             panel_frame.visible = state.panel_visible
+        end,
+        toggle_debug = function()
+            engine.debug.set_visible(not engine.debug.is_visible())
+        end,
+        sim_speed = function(s)
+            engine.sim.set_time_scale(s)
+            engine.log("Simulation speed: " .. (s == 0 and "Paused" or (s .. "x")))
         end,
         on_about = function() AboutDialog.show() end,
         on_stats = function() StatsDialog.show(state) end,

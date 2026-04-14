@@ -71,7 +71,15 @@ TerrainRenderer::TerrainRenderer(SDL_Renderer* renderer, const Terrain& terrain,
             SDL_TEXTUREACCESS_STREAMING,
             CHUNK_SIZE, CHUNK_SIZE
         );
+        chunk.debug_texture = SDL_CreateTexture(
+            renderer,
+            SDL_PIXELFORMAT_RGBA8888,
+            SDL_TEXTUREACCESS_STREAMING,
+            CHUNK_SIZE, CHUNK_SIZE
+        );
+        SDL_SetTextureBlendMode(chunk.debug_texture, SDL_BLENDMODE_BLEND);
         chunk.dirty = true;
+        chunk.debug_dirty = true;
     }
 
     // Build color LUTs for fast rendering (avoids registry hash lookups in hot loop)
@@ -105,6 +113,7 @@ TerrainRenderer::TerrainRenderer(SDL_Renderer* renderer, const Terrain& terrain,
 TerrainRenderer::~TerrainRenderer() {
     for (auto& chunk : chunks_) {
         if (chunk.texture) SDL_DestroyTexture(chunk.texture);
+        if (chunk.debug_texture) SDL_DestroyTexture(chunk.debug_texture);
     }
 }
 
@@ -152,6 +161,7 @@ void TerrainRenderer::FullRebuild() {
     // Mark all chunks dirty — they'll be rebuilt lazily on next Render
     for (auto& chunk : chunks_) {
         chunk.dirty = true;
+        chunk.debug_dirty = true;
     }
 }
 
@@ -164,7 +174,9 @@ void TerrainRenderer::UpdateRegion(int rx, int ry, int rw, int rh) {
 
     for (int cy = cy0; cy <= cy1; cy++) {
         for (int cx = cx0; cx <= cx1; cx++) {
-            chunks_[ChunkIndex(cx, cy)].dirty = true;
+            auto& chunk = chunks_[ChunkIndex(cx, cy)];
+            chunk.dirty = true;
+            chunk.debug_dirty = true;
         }
     }
 }
@@ -199,15 +211,115 @@ void TerrainRenderer::Render(SDL_Renderer* renderer, const Camera& camera) {
             int sx, sy;
             camera.WorldToScreen(world_x, world_y, sx, sy);
 
-            int chunk_screen_size = static_cast<int>(CHUNK_SIZE * scale);
-
             // Clamp source rect for edge chunks
             int src_w = std::min(CHUNK_SIZE, width_ - cx * CHUNK_SIZE);
             int src_h = std::min(CHUNK_SIZE, height_ - cy * CHUNK_SIZE);
 
+            // Compute right/bottom edge from world coords to avoid 1px gaps between chunks
+            int sx2 = static_cast<int>((world_x + src_w - cam_x) * scale);
+            int sy2 = static_cast<int>((world_y + src_h - cam_y) * scale);
+
             SDL_Rect src = {0, 0, src_w, src_h};
-            SDL_Rect dst = {sx, sy, static_cast<int>(src_w * scale), static_cast<int>(src_h * scale)};
+            SDL_Rect dst = {sx, sy, sx2 - sx, sy2 - sy};
             SDL_RenderCopy(renderer, chunks_[idx].texture, &src, &dst);
         }
     }
+}
+
+void TerrainRenderer::RebuildDebugChunk(SDL_Renderer* /*renderer*/, int cx, int cy) {
+    int idx = ChunkIndex(cx, cy);
+    Chunk& chunk = chunks_[idx];
+    if (!chunk.debug_dirty || !chunk.debug_texture) return;
+
+    void* pixels_raw;
+    int pitch;
+    if (SDL_LockTexture(chunk.debug_texture, nullptr, &pixels_raw, &pitch) != 0) {
+        return;
+    }
+
+    auto* pixels = static_cast<uint32_t*>(pixels_raw);
+    int pitch_pixels = pitch / 4;
+
+    int world_x0 = cx * CHUNK_SIZE;
+    int world_y0 = cy * CHUNK_SIZE;
+
+    for (int ly = 0; ly < CHUNK_SIZE; ly++) {
+        int wy = world_y0 + ly;
+        for (int lx = 0; lx < CHUNK_SIZE; lx++) {
+            int wx = world_x0 + lx;
+            uint32_t pixel;
+            if (wx < width_ && wy < height_) {
+                Cell cell = terrain_.GetCell(wx, wy);
+                // Solid/powder cells get semi-transparent red overlay
+                pixel = is_air_lut_[cell.material_id] ? 0x00000000 : 0xFF000060;
+            } else {
+                pixel = 0x00000000;
+            }
+            pixels[ly * pitch_pixels + lx] = pixel;
+        }
+    }
+
+    SDL_UnlockTexture(chunk.debug_texture);
+    chunk.debug_dirty = false;
+}
+
+void TerrainRenderer::RenderDebugOverlay(SDL_Renderer* renderer, const Camera& camera) {
+    float cam_x = camera.GetX();
+    float cam_y = camera.GetY();
+    int view_w = camera.GetViewWorldWidth();
+    int view_h = camera.GetViewWorldHeight();
+    float scale = camera.GetScale();
+
+    int cx0 = std::max(0, static_cast<int>(cam_x) / CHUNK_SIZE);
+    int cy0 = std::max(0, static_cast<int>(cam_y) / CHUNK_SIZE);
+    int cx1 = std::min(chunks_x_ - 1, static_cast<int>(cam_x + view_w) / CHUNK_SIZE);
+    int cy1 = std::min(chunks_y_ - 1, static_cast<int>(cam_y + view_h) / CHUNK_SIZE);
+
+    // Render collision overlay textures
+    for (int cy = cy0; cy <= cy1; cy++) {
+        for (int cx = cx0; cx <= cx1; cx++) {
+            int idx = ChunkIndex(cx, cy);
+
+            if (chunks_[idx].debug_dirty) {
+                RebuildDebugChunk(renderer, cx, cy);
+            }
+
+            float world_x = static_cast<float>(cx * CHUNK_SIZE);
+            float world_y = static_cast<float>(cy * CHUNK_SIZE);
+
+            int sx, sy;
+            camera.WorldToScreen(world_x, world_y, sx, sy);
+
+            int src_w = std::min(CHUNK_SIZE, width_ - cx * CHUNK_SIZE);
+            int src_h = std::min(CHUNK_SIZE, height_ - cy * CHUNK_SIZE);
+            int sx2 = static_cast<int>((world_x + src_w - cam_x) * scale);
+            int sy2 = static_cast<int>((world_y + src_h - cam_y) * scale);
+
+            SDL_Rect src = {0, 0, src_w, src_h};
+            SDL_Rect dst = {sx, sy, sx2 - sx, sy2 - sy};
+            SDL_RenderCopy(renderer, chunks_[idx].debug_texture, &src, &dst);
+        }
+    }
+
+    // Draw chunk border lines (green)
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, 0, 255, 0, 120);
+
+    // Vertical lines
+    for (int cx = cx0; cx <= cx1 + 1; cx++) {
+        int sx = static_cast<int>((cx * CHUNK_SIZE - cam_x) * scale);
+        int sy_top = static_cast<int>((cy0 * CHUNK_SIZE - cam_y) * scale);
+        int sy_bot = static_cast<int>(((cy1 + 1) * CHUNK_SIZE - cam_y) * scale);
+        SDL_RenderDrawLine(renderer, sx, sy_top, sx, sy_bot);
+    }
+
+    // Horizontal lines
+    for (int cy = cy0; cy <= cy1 + 1; cy++) {
+        int sy = static_cast<int>((cy * CHUNK_SIZE - cam_y) * scale);
+        int sx_left = static_cast<int>((cx0 * CHUNK_SIZE - cam_x) * scale);
+        int sx_right = static_cast<int>(((cx1 + 1) * CHUNK_SIZE - cam_x) * scale);
+        SDL_RenderDrawLine(renderer, sx_left, sy, sx_right, sy);
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }

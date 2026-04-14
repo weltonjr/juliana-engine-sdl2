@@ -380,10 +380,6 @@ void Engine::Run() {
 void Engine::SimTick(double dt) {
     input_->PollEvents();
 
-    // Toggle log console with backtick
-    if (input_->GetRaw().IsJustPressed(SDL_SCANCODE_GRAVE))
-        log_console_visible_ = !log_console_visible_;
-
     // Route mouse events to the UI system (menus, HUD, etc.)
     ui_system_->HandleMouseMove(input_->GetMouseX(), input_->GetMouseY());
     if (input_->IsMouseJustPressed())
@@ -408,7 +404,7 @@ void Engine::SimTick(double dt) {
 
     // ── Gameplay simulation (only when a scenario is loaded) ──────────────────
 
-    // Character cycling (keys 1 / 3)
+    // Character cycling (keys 1 / 3) — always responsive regardless of time scale
     if (!controllable_entities_.empty()) {
         int n    = static_cast<int>(controllable_entities_.size());
         bool prev = input_->IsJustPressed(0, InputAction::PrevCharacter);
@@ -429,6 +425,15 @@ void Engine::SimTick(double dt) {
     Entity* player = nullptr;
     if (!controllable_entities_.empty())
         player = entity_manager_->GetEntity(controllable_entities_[active_char_index_]);
+
+    // Skip physics/simulation when paused
+    if (sim_time_scale_ <= 0.0f) {
+        debug_ui_->Update(input_->GetMouseX(), input_->GetMouseY(),
+                          *cameras_[0], *terrain_, registry_, player);
+        return;
+    }
+
+    double scaled_dt = dt * static_cast<double>(sim_time_scale_);
 
     if (player) UpdatePlayerControl(*player, dt);
 
@@ -458,15 +463,20 @@ void Engine::SimTick(double dt) {
         }
     }
 
-    physics_->Update(*entity_manager_, *terrain_, static_cast<float>(dt));
-    AdvanceActions(dt);
+    physics_->Update(*entity_manager_, *terrain_, static_cast<float>(scaled_dt));
+    AdvanceActions(scaled_dt);
 
     if (player) UpdateCameraFollow(*cameras_[0], *player);
 
-    terrain_sim_->Update(*terrain_);
-    if (terrain_sim_->HasChanges()) {
-        for (auto& rect : terrain_sim_->GetDirtyRects())
-            terrain_renderer_->UpdateRegion(rect.x, rect.y, rect.w, rect.h);
+    // Terrain sim is tick-based — use accumulator to scale its rate
+    terrain_sim_accumulator_ += static_cast<double>(sim_time_scale_);
+    while (terrain_sim_accumulator_ >= 1.0) {
+        terrain_sim_->Update(*terrain_);
+        if (terrain_sim_->HasChanges()) {
+            for (auto& rect : terrain_sim_->GetDirtyRects())
+                terrain_renderer_->UpdateRegion(rect.x, rect.y, rect.w, rect.h);
+        }
+        terrain_sim_accumulator_ -= 1.0;
     }
 
     debug_ui_->Update(input_->GetMouseX(), input_->GetMouseY(),
@@ -485,6 +495,8 @@ void Engine::Render(double alpha) {
     // Render terrain whenever it is loaded (game simulation or editor preview)
     if (terrain_renderer_) {
         terrain_renderer_->Render(r, *cameras_[0]);
+        if (debug_overlay_visible_)
+            terrain_renderer_->RenderDebugOverlay(r, *cameras_[0]);
     }
     // Editor entity markers rendered between terrain and UI
     if (!sim_running_ && !editor_markers_.empty()) {

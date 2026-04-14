@@ -496,6 +496,23 @@ void LuaState::BindAPI() {
     cam_tbl["get_zoom"]     = [&engine]() -> float { return engine.GetCameraZoom(); };
     cam_tbl["set_zoom"]     = [&engine](float s) { engine.SetCameraZoom(s); };
 
+    // ── engine.log_console table ─────────────────────────────────────────────
+    auto lc_tbl = eng.create("log_console");
+    lc_tbl["show"]       = [&engine]() { engine.SetLogConsoleVisible(true); };
+    lc_tbl["hide"]       = [&engine]() { engine.SetLogConsoleVisible(false); };
+    lc_tbl["toggle"]     = [&engine]() { engine.ToggleLogConsole(); };
+    lc_tbl["is_visible"] = [&engine]() -> bool { return engine.IsLogConsoleVisible(); };
+
+    // ── engine.debug table ───────────────────────────────────────────────────
+    auto dbg_tbl = eng.create("debug");
+    dbg_tbl["set_visible"] = [&engine](bool v) { engine.SetDebugOverlayVisible(v); };
+    dbg_tbl["is_visible"]  = [&engine]() -> bool { return engine.IsDebugOverlayVisible(); };
+
+    // ── engine.sim table ─────────────────────────────────────────────────────
+    auto sim_tbl = eng.create("sim");
+    sim_tbl["get_time_scale"] = [&engine]() -> float { return engine.GetSimTimeScale(); };
+    sim_tbl["set_time_scale"] = [&engine](float s) { engine.SetSimTimeScale(s); };
+
     // ── engine.input table ────────────────────────────────────────────────────
     auto inp_tbl = eng.create("input");
 
@@ -536,6 +553,7 @@ void LuaState::BindAPI() {
     key_tbl["BACKSPACE"] = static_cast<int>(SDL_SCANCODE_BACKSPACE);
     key_tbl["LCTRL"]     = static_cast<int>(SDL_SCANCODE_LCTRL);
     key_tbl["RCTRL"]     = static_cast<int>(SDL_SCANCODE_RCTRL);
+    key_tbl["GRAVE"]     = static_cast<int>(SDL_SCANCODE_GRAVE);
 
     // ── engine.fs table ───────────────────────────────────────────────────────
     auto fs_tbl = eng.create("fs");

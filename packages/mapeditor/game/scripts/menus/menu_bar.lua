@@ -1,4 +1,4 @@
--- Top menu bar: File / Edit / Scenario / View / About
+-- Top menu bar: File / Edit / Scenario / Simulation / View / About
 -- Creates a full-width 24px bar with dropdown menus.
 --
 -- Usage:
@@ -12,6 +12,8 @@
 --   on_about    = fn(),
 --   toggle_panel = fn(),  -- show/hide properties panel
 --   on_stats    = fn(),   -- open stats dialog
+--   toggle_debug = fn(),  -- toggle debug overlay (chunk borders + collision)
+--   sim_speed   = fn(s),  -- set simulation time scale (0, 0.5, 1, 2, 10)
 -- }
 
 local layout = require("util/layout")
@@ -23,11 +25,12 @@ local WIN_W   = layout.WIN_W
 
 -- Width per top-level menu button (sized to fit label + padding)
 local MENU_DEFS = {
-    { label = "File",     w = 52  },
-    { label = "Edit",     w = 52  },
-    { label = "Scenario", w = 80  },
-    { label = "View",     w = 52  },
-    { label = "About",    w = 60  },
+    { label = "File",       w = 52  },
+    { label = "Edit",       w = 52  },
+    { label = "Scenario",   w = 80  },
+    { label = "Simulation", w = 90  },
+    { label = "View",       w = 52  },
+    { label = "About",      w = 60  },
 }
 
 -- Track which dropdown is open (nil = all closed)
@@ -85,10 +88,20 @@ function M.build(screen, actions)
             items = {
                 { label = "Settings", fn = actions.toggle_panel },
             }
+        elseif menu.label == "Simulation" then
+            dd_w = 110
+            items = {
+                { label = "Paused",   fn = function() if actions.sim_speed then actions.sim_speed(0)   end end },
+                { label = "0.5x",     fn = function() if actions.sim_speed then actions.sim_speed(0.5) end end },
+                { label = "1x",       fn = function() if actions.sim_speed then actions.sim_speed(1)   end end },
+                { label = "2x",       fn = function() if actions.sim_speed then actions.sim_speed(2)   end end },
+                { label = "10x",      fn = function() if actions.sim_speed then actions.sim_speed(10)  end end },
+            }
         elseif menu.label == "View" then
-            dd_w = 130
+            dd_w = 150
             items = {
                 { label = "Properties Panel", fn = actions.toggle_panel },
+                { label = "Debug View",       fn = actions.toggle_debug },
                 { label = "Stats...",         fn = actions.on_stats     },
             }
         elseif menu.label == "About" then

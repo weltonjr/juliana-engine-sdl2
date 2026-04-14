@@ -115,6 +115,19 @@ public:
 
     const DefinitionRegistry& GetRegistry() const { return registry_; }
 
+    // Log console visibility (controlled from Lua)
+    bool IsLogConsoleVisible() const { return log_console_visible_; }
+    void SetLogConsoleVisible(bool v) { log_console_visible_ = v; }
+    void ToggleLogConsole() { log_console_visible_ = !log_console_visible_; }
+
+    // Debug overlay visibility (controlled from Lua)
+    bool IsDebugOverlayVisible() const { return debug_overlay_visible_; }
+    void SetDebugOverlayVisible(bool v) { debug_overlay_visible_ = v; }
+
+    // Simulation time scale (0 = paused, 0.5, 1.0, 2.0, 10.0)
+    float GetSimTimeScale() const { return sim_time_scale_; }
+    void  SetSimTimeScale(float s) { sim_time_scale_ = s; }
+
 private:
     // --- Editor overlay ---
     void DrawWorldMarkers(const std::vector<WorldMarker>& markers);
@@ -149,6 +162,9 @@ private:
 
     std::unique_ptr<LogConsole> log_console_;
     bool log_console_visible_ = false;
+    bool debug_overlay_visible_ = false;
+    float sim_time_scale_ = 1.0f;
+    double terrain_sim_accumulator_ = 0.0;
     bool quit_requested_ = false;
 
     std::function<void(double)> tick_callback_;

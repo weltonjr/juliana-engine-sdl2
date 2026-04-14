@@ -28,6 +28,9 @@ public:
     // Render visible chunks
     void Render(SDL_Renderer* renderer, const Camera& camera);
 
+    // Render debug overlay: chunk borders (green) + solid-cell overlay (red)
+    void RenderDebugOverlay(SDL_Renderer* renderer, const Camera& camera);
+
     Color GetMaterialColor(MaterialID id) const;
     Color GetBackgroundColor(BackgroundID id) const;
     Color GetCellColor(const Cell& cell) const;
@@ -35,10 +38,13 @@ public:
 private:
     struct Chunk {
         SDL_Texture* texture = nullptr;
+        SDL_Texture* debug_texture = nullptr;
         bool dirty = true;
+        bool debug_dirty = true;
     };
 
     void RebuildChunk(SDL_Renderer* renderer, int cx, int cy);
+    void RebuildDebugChunk(SDL_Renderer* renderer, int cx, int cy);
     int ChunkIndex(int cx, int cy) const { return cy * chunks_x_ + cx; }
     uint32_t ColorToPixel(Color c) const;
 
