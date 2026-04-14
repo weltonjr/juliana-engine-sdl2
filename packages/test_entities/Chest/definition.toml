@@ -1,0 +1,24 @@
+[object]
+id = "Chest"
+name = "Chest"
+category = ["Prop", "Container"]
+aspects = []
+player_controllable = false
+
+[physics]
+mode = "static"
+size = [16, 16]
+solid = true
+overlap_detection = true
+
+[container]
+enabled = true
+max_slots = 12
+filter = []
+
+[visual]
+color = [139, 90, 43]
+
+[properties]
+loot_level = 1
+locked = 0

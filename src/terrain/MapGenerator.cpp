@@ -366,13 +366,15 @@ std::vector<SpawnPosition> MapGenerator::FindSpawnPositions(
     return positions;
 }
 
-Terrain MapGenerator::GenerateFromScenario(const ScenarioDef& scenario, const DefinitionRegistry& registry) {
+Terrain MapGenerator::GenerateFromScenario(const ScenarioDef& scenario, const DefinitionRegistry& registry,
+                                            uint32_t* seed_used_out) {
     int w = scenario.map.width;
     int h = scenario.map.height;
     uint32_t seed = scenario.map.seed;
     if (seed == 0) {
         seed = static_cast<uint32_t>(std::random_device{}());
     }
+    if (seed_used_out) *seed_used_out = seed;
     std::mt19937 rng(seed);
 
     Terrain terrain(w, h);
@@ -396,16 +398,13 @@ Terrain MapGenerator::GenerateFromScenario(const ScenarioDef& scenario, const De
         // Fallback: basic material assignment
         auto* air = registry.GetMaterial("base:Air");
         auto* dirt = registry.GetMaterial("base:Dirt");
-        auto* rock = registry.GetMaterial("base:Rock");
         MaterialID air_id = air ? air->runtime_id : 0;
         MaterialID dirt_id = dirt ? dirt->runtime_id : 0;
-        MaterialID rock_id = rock ? rock->runtime_id : 0;
 
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 if (y < surface[x]) terrain.SetMaterial(x, y, air_id);
-                else if (y < surface[x] + 40) terrain.SetMaterial(x, y, dirt_id);
-                else terrain.SetMaterial(x, y, rock_id);
+                else terrain.SetMaterial(x, y, dirt_id);
             }
         }
     }

@@ -12,8 +12,10 @@ public:
 
     int GetTickRate() const { return tick_rate_; }
     double GetTickDuration() const { return tick_duration_; }
+    int GetActualFPS() const { return actual_fps_; }
 
 private:
     int tick_rate_;
     double tick_duration_;
+    int actual_fps_ = 0;
 };

@@ -1,0 +1,20 @@
+[game]
+id      = "mapeditor"
+name    = "Map Editor"
+version = "0.1.0"
+
+[window]
+width  = 1280
+height = 720
+
+[ui]
+skin      = "ui/skin.toml"
+font      = "ui/Hack-Regular.ttf"
+font_size = 14
+
+[startup]
+script = "scripts/main.lua"
+
+# Content packages needed for terrain generation (materials, backgrounds)
+[packages]
+load = ["packages/test_entities"]

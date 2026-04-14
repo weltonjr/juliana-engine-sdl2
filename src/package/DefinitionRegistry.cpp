@@ -1,5 +1,68 @@
 #include "package/DefinitionRegistry.h"
 
+// ─── Built-in material / background definitions ──────────────────────────────
+// These are always available under the "base:" prefix so that engine code and
+// editor scripts can rely on them without loading an external content package.
+
+void DefinitionRegistry::RegisterBuiltins() {
+    // Helper lambdas to reduce repetition
+    auto mat = [&](const char* id, const char* name,
+                   MaterialState st, int density, float friction, int hardness,
+                   uint8_t r, uint8_t g, uint8_t b, int color_var = 0,
+                   float transparency = 0.0f, bool glow = false,
+                   bool gravity = false, bool flammable = false,
+                   int blast_resist = 20, int flow_rate = 0, float liquid_drag = 0.0f) {
+        auto d = std::make_unique<MaterialDef>();
+        d->id = id;
+        d->name = name;
+        d->qualified_id = std::string("base:") + id;
+        d->state = st;
+        d->density = density;
+        d->friction = friction;
+        d->hardness = hardness;
+        d->color = { r, g, b, 255 };
+        d->color_variation = color_var;
+        d->transparency = transparency;
+        d->glow = glow;
+        d->gravity = gravity;
+        d->flammable = flammable;
+        d->blast_resistance = blast_resist;
+        d->flow_rate = flow_rate;
+        d->liquid_drag = liquid_drag;
+        RegisterMaterial(std::move(d));
+    };
+
+    auto bg = [&](const char* id, const char* name,
+                  uint8_t r, uint8_t g, uint8_t b,
+                  int color_var = 0, bool transparent = false) {
+        auto d = std::make_unique<BackgroundDef>();
+        d->id = id;
+        d->name = name;
+        d->qualified_id = std::string("base:") + id;
+        d->color = { r, g, b, 255 };
+        d->color_variation = color_var;
+        d->transparent = transparent;
+        RegisterBackground(std::move(d));
+    };
+
+    // ── Materials ─────────────────────────────────────────────────────────────
+    // Only engine-essential materials live here. Game-specific ones (Rock, Lava,
+    // CoalOre, GoldOre) belong in the aetherium content package.
+    //              id        name      state                 dens  fric  hard   R    G    B   cvar  trans  glow  grav  flam  blast flow  ldrag
+    mat("Air",     "Air",    MaterialState::None,               0, 0.0f,  0,   135, 206, 235);
+    mat("Dirt",    "Dirt",   MaterialState::Solid,            100, 0.8f, 30,   139, 119, 101, 10);
+    mat("Sand",    "Sand",   MaterialState::Powder,            90, 0.6f, 10,   210, 190, 140, 12, 0.0f, false, true,  false,  5);
+    mat("Water",   "Water",  MaterialState::Liquid,            50, 0.2f,  0,    60, 100, 200,  5, 0.5f, false, true,  false, 20,  3, 0.85f);
+
+    // ── Backgrounds ───────────────────────────────────────────────────────────
+    bg("Sky",      "Open Sky",   0,   0,   0,  0, true);
+    bg("DirtWall", "Dirt Wall", 90,  75,  60,  6);
+    bg("RockWall", "Rock Wall", 80,  80,  85,  5);
+
+    std::printf("Registered %d built-in materials, %d built-in backgrounds\n",
+                GetMaterialCount(), GetBackgroundCount());
+}
+
 MaterialID DefinitionRegistry::RegisterMaterial(std::unique_ptr<MaterialDef> def) {
     MaterialID id = next_material_id_++;
     def->runtime_id = id;

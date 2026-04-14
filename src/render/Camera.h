@@ -18,6 +18,7 @@ public:
     int GetViewportWidth() const { return viewport_width_; }
     int GetViewportHeight() const { return viewport_height_; }
     float GetScale() const { return scale_; }
+    void  SetScale(float s) { scale_ = std::max(0.25f, std::min(s, 16.0f)); }
 
     // How many terrain pixels are visible
     int GetViewWorldWidth() const { return static_cast<int>(viewport_width_ / scale_); }

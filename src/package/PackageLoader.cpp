@@ -16,6 +16,25 @@ void PackageLoader::LoadAll(const std::string& packages_dir) {
         return;
     }
 
+    // Check if the path itself is a package root (has definition.toml with [package])
+    auto root_def = fs::path(packages_dir) / "definition.toml";
+    if (fs::exists(root_def)) {
+        try {
+            auto tbl = toml::parse_file(root_def.string());
+            if (tbl.contains("package")) {
+                auto pkg_id = tbl["package"]["id"].value_or<std::string>("");
+                if (!pkg_id.empty()) {
+                    std::printf("Loading package: %s\n", pkg_id.c_str());
+                    LoadPackage(packages_dir, pkg_id);
+                    return;  // Direct package path — don't scan children as packages
+                }
+            }
+        } catch (const toml::parse_error& e) {
+            std::fprintf(stderr, "TOML parse error in %s: %s\n", root_def.c_str(), e.what());
+        }
+    }
+
+    // Otherwise scan subdirectories for packages
     for (const auto& entry : fs::directory_iterator(packages_dir)) {
         if (!entry.is_directory()) continue;
 
@@ -241,6 +260,16 @@ void PackageLoader::ParseObject(const std::string& file_path, const std::string&
             for (auto& f : *filt) {
                 def->container_filter.push_back(f.value_or<std::string>(""));
             }
+        }
+    }
+
+    // Editor / visual color
+    if (tbl.contains("visual")) {
+        auto& vis = *tbl["visual"].as_table();
+        if (auto arr = vis["color"].as_array(); arr && arr->size() >= 3) {
+            def->color.r = static_cast<uint8_t>((*arr)[0].value_or(200));
+            def->color.g = static_cast<uint8_t>((*arr)[1].value_or(200));
+            def->color.b = static_cast<uint8_t>((*arr)[2].value_or(200));
         }
     }
 

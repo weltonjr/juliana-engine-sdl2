@@ -1,0 +1,18 @@
+# Map Editor UI Skin
+# All colors are [r, g, b] or [r, g, b, a]
+# A skin.png can be added later for sprite-based elements; colors are used until then.
+
+[colors]
+# Panel / frame
+frame_bg      = [18,  18,  30,  235]
+frame_border  = [65,  65,  105, 255]
+
+# Buttons — three interaction states
+button_normal  = [45,  45,  80,  255]
+button_hover   = [65,  65,  115, 255]
+button_pressed = [30,  30,  55,  255]
+button_border  = [75,  75,  120, 255]
+button_text    = [200, 200, 230, 255]
+
+# Labels
+label_text    = [175, 175, 210, 255]

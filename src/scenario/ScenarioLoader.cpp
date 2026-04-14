@@ -28,6 +28,7 @@ std::optional<ScenarioDef> ScenarioLoader::LoadFromFile(const std::string& path)
         scenario.id = s.value("id", "unknown");
         scenario.name = s.value("name", "Unnamed");
         scenario.description = s.value("description", "");
+        scenario.icon = s.value("icon", "");
         if (s.contains("packages")) {
             for (auto& p : s["packages"]) scenario.packages.push_back(p.get<std::string>());
         }
@@ -107,6 +108,18 @@ std::optional<ScenarioDef> ScenarioLoader::LoadFromFile(const std::string& path)
             }
 
             scenario.players.push_back(slot);
+        }
+    }
+
+    // Cell overrides (applied post-generation by the engine)
+    if (j.contains("overrides")) {
+        for (auto& ov : j["overrides"]) {
+            CellOverride co;
+            co.x = ov.value("x", 0);
+            co.y = ov.value("y", 0);
+            co.material_id   = ov.value("material_id", "");
+            co.background_id = ov.value("background_id", "");
+            scenario.overrides.push_back(co);
         }
     }
 

@@ -36,8 +36,18 @@ bool InputManager::ShouldQuit() const {
     return raw_->ShouldQuit();
 }
 
-int InputManager::GetMouseX() const { return raw_->GetMouseX(); }
-int InputManager::GetMouseY() const { return raw_->GetMouseY(); }
+int  InputManager::GetMouseX() const { return raw_->GetMouseX(); }
+int  InputManager::GetMouseY() const { return raw_->GetMouseY(); }
+
+bool InputManager::IsMouseDown(int button) const         { return raw_->IsMouseDown(button); }
+bool InputManager::IsMouseJustPressed(int button) const  { return raw_->IsMouseJustPressed(button); }
+bool InputManager::IsMouseJustReleased(int button) const { return raw_->IsMouseJustReleased(button); }
+
+int  InputManager::GetScrollY()          const { return raw_->GetScrollY(); }
+const std::string& InputManager::GetTextInput() const { return raw_->GetTextInput(); }
+void InputManager::StartTextInput()            { raw_->StartTextInput(); }
+void InputManager::StopTextInput()             { raw_->StopTextInput(); }
+bool InputManager::IsTextInputActive()   const { return raw_->IsTextInputActive(); }
 
 void InputManager::SetBinding(int slot, InputAction action, ActionBinding binding) {
     if (!SlotValid(slot)) {
