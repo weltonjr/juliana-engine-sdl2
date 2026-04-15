@@ -701,6 +701,9 @@ local function build_editor_screen(initial_tbl)
         sim_speed = function(s)
             engine.sim.set_time_scale(s)
             engine.log("Simulation speed: " .. (s == 0 and "Paused" or (s .. "x")))
+            if state.menu_bar_ctrl and state.menu_bar_ctrl.set_active_speed then
+                state.menu_bar_ctrl.set_active_speed(s)
+            end
         end,
         on_about = function() AboutDialog.show() end,
         on_stats = function() if state.stats_hud then state.stats_hud.toggle() end end,

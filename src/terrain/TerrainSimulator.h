@@ -124,6 +124,7 @@ private:
     std::vector<int>           lifetime_lut_;
     std::vector<float>         friction_lut_;
     std::vector<float>         liquid_drag_lut_;
+    std::vector<float>         inertial_resistance_lut_;
 
     // Per-cell overlays
     std::vector<uint8_t> processed_;  // 1 = already moved this tick

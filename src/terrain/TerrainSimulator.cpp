@@ -23,19 +23,21 @@ TerrainSimulator::TerrainSimulator(const DefinitionRegistry& registry)
     lifetime_lut_.resize(256, 0);
     friction_lut_.resize(256, 0.8f);
     liquid_drag_lut_.resize(256, 0.85f);
+    inertial_resistance_lut_.resize(256, 0.0f);
 
     for (int i = 0; i < 256; i++) {
         auto* mat = registry.GetMaterialByRuntimeID(static_cast<MaterialID>(i));
         if (mat) {
-            state_lut_[i]       = mat->state;
-            gravity_lut_[i]     = mat->gravity;
-            flow_lut_[i]        = mat->flow_rate;
-            density_lut_[i]     = mat->density;
-            rise_rate_lut_[i]   = mat->rise_rate;
-            dispersion_lut_[i]  = mat->dispersion;
-            lifetime_lut_[i]    = mat->lifetime;
-            friction_lut_[i]    = mat->friction;
-            liquid_drag_lut_[i] = mat->liquid_drag;
+            state_lut_[i]                = mat->state;
+            gravity_lut_[i]              = mat->gravity;
+            flow_lut_[i]                 = mat->flow_rate;
+            density_lut_[i]              = mat->density;
+            rise_rate_lut_[i]            = mat->rise_rate;
+            dispersion_lut_[i]           = mat->dispersion;
+            lifetime_lut_[i]             = mat->lifetime;
+            friction_lut_[i]             = mat->friction;
+            liquid_drag_lut_[i]          = mat->liquid_drag;
+            inertial_resistance_lut_[i]  = mat->inertial_resistance;
         }
     }
 }
@@ -307,6 +309,18 @@ void TerrainSimulator::SimulatePowder(Terrain& terrain) {
                         }
                     } else {
                         // Blocked going straight — try diagonal
+                        // Inertial resistance: settled powder has a chance to resist sliding
+                        float resistance = inertial_resistance_lut_[cell.material_id];
+                        if (resistance > 0.0f) {
+                            uint32_t r = Xorshift32();
+                            float roll = static_cast<float>(r & 0xFFFF) / 65535.0f;
+                            if (roll < resistance) {
+                                // Resist — don't slide, settle in place
+                                vel_x_[idx] = 0.0f;
+                                vel_y_[idx] = 0.0f;
+                                goto next_cell;
+                            }
+                        }
                         int pref = ((x + y) & 1) ? 1 : -1;
                         bool moved_diag = false;
                         for (int pass = 0; pass < 2 && !moved_diag; pass++) {
@@ -346,6 +360,7 @@ void TerrainSimulator::SimulatePowder(Terrain& terrain) {
                             vel_y_[idx] = 0.0f;
                         }
                     }
+                    next_cell:;
                 }
             }
         }
@@ -457,11 +472,22 @@ void TerrainSimulator::SimulateLiquid(Terrain& terrain) {
                     }
 
                     // ── Horizontal phase: spread 1 cell per tick ─────────────
-                    // Runs when the cell didn't fall this tick (dy==0 or fully blocked).
-                    // Tries each direction up to flow_rate steps, moving 1 cell at a time.
-                    // This matches FallingSandJava dispersionRate behaviour: the cell
-                    // walks sideways into the first available air/gas slot.
+                    // Only runs when the liquid is grounded — i.e. the cell directly
+                    // below is something it cannot fall into. This mirrors the
+                    // FallingSandJava isFreeFalling flag: while in mid-air the liquid
+                    // accumulates downward velocity and must NOT spread sideways.
                     if (flow <= 0) continue;
+
+                    if (y + 1 < h) {
+                        Cell below = terrain.GetCell(x, y + 1);
+                        MaterialState below_st = state_lut_[below.material_id];
+                        bool can_fall_below =
+                            below_st == MaterialState::None ||
+                            below_st == MaterialState::Gas  ||
+                            (below_st == MaterialState::Liquid &&
+                             cell_density > density_lut_[below.material_id]);
+                        if (can_fall_below) continue;  // free-falling — don't spread
+                    }
 
                     // Direction preference: alternates per-cell-position to avoid bias.
                     // Using column parity (not tick_counter) so it doesn't oscillate

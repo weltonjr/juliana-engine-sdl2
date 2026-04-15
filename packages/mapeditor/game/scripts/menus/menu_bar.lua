@@ -28,13 +28,19 @@ local MENU_DEFS = {
     { label = "File",       w = 52  },
     { label = "Edit",       w = 52  },
     { label = "Scenario",   w = 80  },
-    { label = "Simulation", w = 90  },
+    { label = "Simulation", w = 130 },
     { label = "View",       w = 52  },
     { label = "About",      w = 60  },
 }
 
 -- Track which dropdown is open (nil = all closed)
 local open_dropdown = nil
+
+-- Speed label helpers
+local SPEED_LABELS = { [0] = "Paused", [0.5] = "0.5x", [1] = "1x", [2] = "2x", [10] = "10x" }
+local function speed_label(s)
+    return SPEED_LABELS[s] or (tostring(s) .. "x")
+end
 
 local function close_all(dropdowns)
     for _, dd in ipairs(dropdowns) do
@@ -59,10 +65,13 @@ function M.build(screen, actions)
     local menus = MENU_DEFS
 
     local dropdowns = {}
+    local sim_top_btn   = nil   -- top-level "Simulation" button (for label update)
+    local sim_item_btns = {}    -- speed item buttons keyed by speed value
 
     -- Build each top-level menu button + its dropdown frame
     for idx, menu in ipairs(menus) do
         local btn = bar:add_button(menu.label, menu.x, 0, menu.w, MENU_H)
+        if menu.label == "Simulation" then sim_top_btn = btn end
 
         -- Dropdown frame (hidden by default), attached to the bar
         -- Dropdown is at least as wide as the button, wider for long item labels
@@ -89,14 +98,19 @@ function M.build(screen, actions)
                 { label = "Settings", fn = actions.toggle_panel },
             }
         elseif menu.label == "Simulation" then
-            dd_w = 110
-            items = {
-                { label = "Paused",   fn = function() if actions.sim_speed then actions.sim_speed(0)   end end },
-                { label = "0.5x",     fn = function() if actions.sim_speed then actions.sim_speed(0.5) end end },
-                { label = "1x",       fn = function() if actions.sim_speed then actions.sim_speed(1)   end end },
-                { label = "2x",       fn = function() if actions.sim_speed then actions.sim_speed(2)   end end },
-                { label = "10x",      fn = function() if actions.sim_speed then actions.sim_speed(10)  end end },
-            }
+            dd_w = 130
+            local speeds = { 0, 0.5, 1, 2, 10 }
+            items = {}
+            for _, s in ipairs(speeds) do
+                local speed_val = s
+                table.insert(items, {
+                    label = "  " .. speed_label(s),
+                    speed = s,
+                    fn = function()
+                        if actions.sim_speed then actions.sim_speed(speed_val) end
+                    end,
+                })
+            end
         elseif menu.label == "View" then
             dd_w = 150
             items = {
@@ -118,6 +132,10 @@ function M.build(screen, actions)
 
         for i, item in ipairs(items) do
             local ib = dd:add_button(item.label, 0, (i-1) * MENU_H, dd_w, MENU_H)
+            ib.text_left = true
+            if item.speed ~= nil then
+                sim_item_btns[item.speed] = ib
+            end
             ib:on_click(function()
                 close_all(dropdowns)
                 if item.fn then item.fn() end
@@ -135,9 +153,24 @@ function M.build(screen, actions)
         end)
     end
 
+    -- Marks the active speed in the dropdown and updates the top button label.
+    local function set_active_speed(s)
+        local lbl = speed_label(s)
+        if sim_top_btn then
+            sim_top_btn.text = "Simulation [" .. lbl .. "]"
+        end
+        for speed_val, ib in pairs(sim_item_btns) do
+            ib.text = (speed_val == s and "● " or "  ") .. speed_label(speed_val)
+        end
+    end
+
+    -- Apply default active marker (1x on load)
+    set_active_speed(1)
+
     -- Return a close function so editor_screen can close dropdowns on backdrop click
     return {
-        close_all = function() close_all(dropdowns) end
+        close_all      = function() close_all(dropdowns) end,
+        set_active_speed = set_active_speed,
     }
 end
 

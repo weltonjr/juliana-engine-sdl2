@@ -34,6 +34,7 @@ struct MaterialDef {
     int blast_resistance = 20;
     int flow_rate = 0;
     float liquid_drag = 0.0f;
+    float inertial_resistance = 0.0f;  // [0,1] probability that powder resists diagonal slide
     int rise_rate = 0;
     int dispersion = 0;
     int lifetime = 0;

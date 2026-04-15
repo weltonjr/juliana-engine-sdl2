@@ -134,6 +134,7 @@ void PackageLoader::ParseMaterial(const std::string& file_path, const std::strin
         def->blast_resistance = beh["blast_resistance"].value_or(20);
         def->flow_rate = beh["flow_rate"].value_or(0);
         def->liquid_drag = beh["liquid_drag"].value_or(0.0f);
+        def->inertial_resistance = beh["inertial_resistance"].value_or(0.0f);
         def->rise_rate = beh["rise_rate"].value_or(0);
         def->dispersion = beh["dispersion"].value_or(0);
         def->lifetime = beh["lifetime"].value_or(0);
