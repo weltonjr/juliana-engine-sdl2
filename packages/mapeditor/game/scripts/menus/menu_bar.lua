@@ -28,7 +28,7 @@ local MENU_DEFS = {
     { label = "File",       w = 52  },
     { label = "Edit",       w = 52  },
     { label = "Scenario",   w = 80  },
-    { label = "Simulation", w = 130 },
+    { label = "Simulation", w = 150 },
     { label = "View",       w = 52  },
     { label = "About",      w = 60  },
 }
@@ -165,7 +165,7 @@ function M.build(screen, actions)
     end
 
     -- Apply default active marker (1x on load)
-    set_active_speed(1)
+    set_active_speed(0)
 
     -- Return a close function so editor_screen can close dropdowns on backdrop click
     return {

@@ -16,5 +16,5 @@ color_variation = 12
 gravity = true
 flammable = false
 blast_resistance = 5
-inertial_resistance = 0.5
+inertial_resistance = 0.9
 dig_product = "test:Sand"
