@@ -249,6 +249,7 @@ void MapGenerator::GenerateLakes(Terrain& terrain, const std::vector<int>& surfa
                                   const DefinitionRegistry& registry, std::mt19937& rng) {
     int w = terrain.GetWidth();
     auto* water = registry.GetMaterial("base:Water");
+    if (!water) water = registry.GetMaterial("base:UnknownLiquid");
     auto* air = registry.GetMaterial("base:Air");
     if (!water || !air) return;
 
@@ -381,6 +382,17 @@ Terrain MapGenerator::GenerateFromScenario(const ScenarioDef& scenario, const De
 
     Terrain terrain(w, h);
 
+    // ── Empty map: blank canvas, all air, skip all passes ────────────────────
+    if (scenario.map.shape == "empty") {
+        MaterialID air_id = 0;
+        if (auto* air = registry.GetMaterial("base:Air")) air_id = air->runtime_id;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                terrain.SetMaterial(x, y, air_id);
+        std::printf("Generated empty map: %dx%d\n", w, h);
+        return terrain;
+    }
+
     // Pass 1: Generate shape (surface heightmap)
     std::vector<int> surface;
     if (scenario.map.shape == "island") {
@@ -400,16 +412,17 @@ Terrain MapGenerator::GenerateFromScenario(const ScenarioDef& scenario, const De
     if (!scenario.map.materials.empty()) {
         AssignMaterials(terrain, surface, scenario.map.materials, registry, sea_level_y);
     } else {
-        // Fallback: basic material assignment
-        auto* air = registry.GetMaterial("base:Air");
+        // Fallback: use built-in Unknown so missing packages are visually obvious
+        auto* air  = registry.GetMaterial("base:Air");
         auto* dirt = registry.GetMaterial("base:Dirt");
-        MaterialID air_id = air ? air->runtime_id : 0;
+        if (!dirt) dirt = registry.GetMaterial("base:Unknown");
+        MaterialID air_id  = air  ? air->runtime_id  : 0;
         MaterialID dirt_id = dirt ? dirt->runtime_id : 0;
 
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 if (y < surface[x]) terrain.SetMaterial(x, y, air_id);
-                else terrain.SetMaterial(x, y, dirt_id);
+                else                terrain.SetMaterial(x, y, dirt_id);
             }
         }
     }

@@ -46,18 +46,14 @@ void DefinitionRegistry::RegisterBuiltins() {
     };
 
     // ── Materials ─────────────────────────────────────────────────────────────
-    // Only engine-essential materials live here. Game-specific ones (Rock, Lava,
-    // CoalOre, GoldOre) belong in the aetherium content package.
+    // Only engine-essential materials live here.
     //              id        name      state                 dens  fric  hard   R    G    B   cvar  trans  glow  grav  flam  blast flow  ldrag
     mat("Air",     "Air",    MaterialState::None,               0, 0.0f,  0,   135, 206, 235);
-    mat("Dirt",    "Dirt",   MaterialState::Solid,            100, 0.8f, 30,   139, 119, 101, 10);
-    mat("Sand",    "Sand",   MaterialState::Powder,            90, 0.6f, 10,   210, 190, 140, 12, 0.0f, false, true,  false,  5);
-    mat("Water",   "Water",  MaterialState::Liquid,            50, 0.2f,  0,    60, 100, 200,  5, 0.5f, false, true,  false, 20,  3, 0.85f);
-
+    mat("Unknown", "Unknown",MaterialState::Solid,            100, 0.8f,  0,   255, 105, 180);
+    mat("UnknownLiquid","Unknown Liquid",MaterialState::Liquid, 50, 0.2f, 0,   255, 150, 210, 0, 0.3f, false, true, false, 20, 3, 0.85f);
+   
     // ── Backgrounds ───────────────────────────────────────────────────────────
     bg("Sky",      "Open Sky",   0,   0,   0,  0, true);
-    bg("DirtWall", "Dirt Wall", 90,  75,  60,  6);
-    bg("RockWall", "Rock Wall", 80,  80,  85,  5);
 
     std::printf("Registered %d built-in materials, %d built-in backgrounds\n",
                 GetMaterialCount(), GetBackgroundCount());

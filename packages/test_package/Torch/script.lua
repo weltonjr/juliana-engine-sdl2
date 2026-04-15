@@ -1,2 +1,0 @@
-function OnInitialize()
-end

@@ -12,9 +12,9 @@ local M = {}
 -- Default material rules for common shapes
 local DEFAULT_MATERIALS = {
     { id = "base:Air",   rule = "above_surface" },
-    { id = "base:Dirt",  rule = "surface_layer", depth = 30 },
-    { id = "base:Dirt",  rule = "deep",          min_depth = 60 },
-    { id = "base:Dirt",  rule = "fill" },
+    { id = "test:Dirt",  rule = "surface_layer", depth = 30 },
+    { id = "test:Dirt",  rule = "deep",          min_depth = 60 },
+    { id = "test:Dirt",  rule = "fill" },
 }
 
 -- Default feature set
@@ -37,7 +37,7 @@ local function make_groups()
                   value = 0,    min = 0,   max = 999999999 },
                 { key = "shape",  label = "Shape",  type = "enum",
                   value = "flat",
-                  options = { "flat", "island", "mountain", "bowl" } },
+                  options = { "empty", "flat", "island", "mountain", "bowl" } },
             },
         },
         {
