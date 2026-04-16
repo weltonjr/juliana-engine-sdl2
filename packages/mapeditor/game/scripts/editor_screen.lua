@@ -108,6 +108,9 @@ local function do_save(path)
         tbl.entities = ent_list
     end
 
+    -- TODO(phase-4): persist overlay state (temperature, health, ignited, crack,
+    -- stain) per dirty region so reopening a map restores all reactive state.
+
     local ok = engine.fs.write_text(path, engine.json.encode(tbl))
     if ok then
         engine.log("Saved: " .. path)
@@ -427,14 +430,19 @@ local function register_tick()
             if in_viewport then
                 local wx, wy = screen_to_world(mx, my)
                 local cell   = engine.terrain.get_cell(wx, wy)
-                local tip    = (cell and cell.material_id ~= "") and cell.material_id or ""
-                -- Also show nearby entity
-                local eidx   = find_nearest_entity(mx, my)
-                if eidx then
-                    local ename = state.entities[eidx].def_id or ""
-                    tip = (tip ~= "") and (tip .. " | " .. ename) or ename
+                local parts  = {}
+                if cell and cell.material_id ~= "" then parts[#parts+1] = cell.material_id end
+                if engine.terrain.is_loaded() then
+                    parts[#parts+1] = string.format("T=%.1f", engine.sim.get_temperature(wx, wy))
+                    local hp = engine.sim.get_health(wx, wy)
+                    if hp > 0 then parts[#parts+1] = string.format("HP=%d", hp) end
+                    if engine.sim.is_ignited(wx, wy) then parts[#parts+1] = "[BURNING]" end
+                    local crack = engine.sim.get_crack(wx, wy)
+                    if crack > 0 then parts[#parts+1] = string.format("crack=%d", crack) end
                 end
-                state.tooltip_label.text = tip
+                local eidx   = find_nearest_entity(mx, my)
+                if eidx then parts[#parts+1] = state.entities[eidx].def_id or "" end
+                state.tooltip_label.text = table.concat(parts, " | ")
                 state.tooltip_label.x    = mx + 14
                 state.tooltip_label.y    = my - 4
             else
@@ -633,6 +641,36 @@ local function register_tick()
                 lock_panel_if_needed()
                 engine.log("Removed entity #" .. eidx)
             end
+
+        -- ── Sim tools ────────────────────────────────────────────────────────
+        elseif lmb and engine.terrain.is_loaded() then
+            local wx, wy = screen_to_world(mx, my)
+            local bsize  = state.brush_size or 1
+            local half   = math.floor(bsize / 2)
+
+            local function for_each_brush_cell(cx, cy, r, fn)
+                for dy2 = -r, r do for dx2 = -r, r do
+                    if dx2*dx2 + dy2*dy2 <= r*r then fn(cx + dx2, cy + dy2) end
+                end end
+            end
+
+            if tool == "ignite" then
+                for_each_brush_cell(wx, wy, half, function(bx, by) engine.sim.ignite(bx, by) end)
+            elseif tool == "extinguish" then
+                for_each_brush_cell(wx, wy, half, function(bx, by) engine.sim.extinguish(bx, by) end)
+            elseif tool == "damage" then
+                for_each_brush_cell(wx, wy, half, function(bx, by) engine.sim.apply_damage(bx, by, 50) end)
+            elseif tool == "heat" then
+                for_each_brush_cell(wx, wy, half, function(bx, by)
+                    engine.sim.set_temperature(bx, by, engine.sim.get_temperature(bx, by) + 100)
+                end)
+            elseif tool == "chill" then
+                for_each_brush_cell(wx, wy, half, function(bx, by)
+                    engine.sim.set_temperature(bx, by, engine.sim.get_temperature(bx, by) - 100)
+                end)
+            elseif tool == "explode" and lmb_press then
+                engine.sim.trigger_explosion(wx, wy, bsize * 4, 8)
+            end
         end
 
         push_entity_markers()
@@ -695,8 +733,14 @@ local function build_editor_screen(initial_tbl)
             state.panel_visible = not state.panel_visible
             panel_frame.visible = state.panel_visible
         end,
-        toggle_debug = function()
-            engine.debug.set_visible(not engine.debug.is_visible())
+        toggle_overlay = function(mode)
+            -- Toggle: if current overlay matches, turn off; otherwise set it.
+            local cur = engine.debug.get_overlay()
+            if cur == mode then
+                engine.debug.set_overlay("none")
+            else
+                engine.debug.set_overlay(mode)
+            end
         end,
         sim_speed = function(s)
             engine.sim.set_time_scale(s)

@@ -75,6 +75,12 @@ function M.build(screen)
         { id = "rect",       label = "Rect"    },
         { id = "add_entity", label = "+Entity" },
         { id = "rem_entity", label = "-Entity" },
+        { id = "ignite",     label = "Ignite"  },
+        { id = "extinguish", label = "Snuff"   },
+        { id = "damage",     label = "Damage"  },
+        { id = "heat",       label = "Heat+"   },
+        { id = "chill",      label = "Heat-"   },
+        { id = "explode",    label = "Boom"    },
     }
 
     local y = 4

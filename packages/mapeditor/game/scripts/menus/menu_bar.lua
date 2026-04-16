@@ -12,7 +12,7 @@
 --   on_about    = fn(),
 --   toggle_panel = fn(),  -- show/hide properties panel
 --   on_stats    = fn(),   -- open stats dialog
---   toggle_debug = fn(),  -- toggle debug overlay (chunk borders + collision)
+--   toggle_overlay = fn(mode),  -- toggle render overlay ("diagnostics"|"heatmap"|"health"|"crack"|"stain")
 --   sim_speed   = fn(s),  -- set simulation time scale (0, 0.5, 1, 2, 10)
 -- }
 
@@ -111,12 +111,20 @@ function M.build(screen, actions)
                     end,
                 })
             end
+            table.insert(items, {
+                label = "Step Once",
+                fn = function() engine.sim.step(1) end,
+            })
         elseif menu.label == "View" then
-            dd_w = 150
+            dd_w = 180
             items = {
-                { label = "Properties Panel", fn = actions.toggle_panel },
-                { label = "Debug View",       fn = actions.toggle_debug },
-                { label = "Stats...",         fn = actions.on_stats     },
+                { label = "Properties Panel",   fn = actions.toggle_panel },
+                { label = "Engine Diagnostics",  fn = function() if actions.toggle_overlay then actions.toggle_overlay("diagnostics") end end },
+                { label = "Heatmap",             fn = function() if actions.toggle_overlay then actions.toggle_overlay("heatmap") end end },
+                { label = "Health / Damage",     fn = function() if actions.toggle_overlay then actions.toggle_overlay("health") end end },
+                { label = "Cracks",              fn = function() if actions.toggle_overlay then actions.toggle_overlay("crack") end end },
+                { label = "Stain",               fn = function() if actions.toggle_overlay then actions.toggle_overlay("stain") end end },
+                { label = "Stats...",            fn = actions.on_stats },
             }
         elseif menu.label == "About" then
             dd_w = 150

@@ -1,0 +1,30 @@
+[material]
+id = "Lava"
+name = "Lava"
+
+[physics]
+state = "liquid"
+density = 150
+friction = 0.4
+hardness = 0
+
+[visual]
+color = [220, 80, 10]
+color_variation = 20
+
+[behavior]
+gravity = true
+blast_resistance = 10
+flow_rate = 1
+liquid_drag = 0.5
+
+[temperature]
+heat_conductivity = 0.15
+ambient_temp = 1000.0
+combustion_heat = 30.0
+ignition_temp = 0.0
+
+[[phase_change]]
+temp = 20.0
+above = false
+into = "test:Stone"

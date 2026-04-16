@@ -2,6 +2,7 @@
 #include "core/EngineLog.h"
 #include "game/GameLoader.h"
 #include "input/InputAction.h"
+#include "terrain/TerrainRenderer.h"
 #include <SDL_image.h>
 #include <cmath>
 #include <cstdio>
@@ -92,9 +93,15 @@ void Engine::InitSimulation(const std::string& scenario_path) {
     );
     terrain_renderer_->FullRebuild();
 
-    entity_manager_ = std::make_unique<EntityManager>(registry_);
-    physics_        = std::make_unique<PhysicsSystem>(registry_);
-    terrain_sim_    = std::make_unique<TerrainSimulator>(registry_);
+    entity_manager_  = std::make_unique<EntityManager>(registry_);
+    if (!world_) world_ = std::make_unique<PhysicsWorld>();
+    physics_         = std::make_unique<PhysicsSystem>(registry_, *world_);
+    terrain_sim_     = std::make_unique<TerrainSimulator>(registry_);
+    terrain_renderer_->SetSimulator(terrain_sim_.get());
+    dynamic_bodies_  = std::make_unique<DynamicBodyManager>(*world_, registry_);
+    fragment_tracker_= std::make_unique<FragmentTracker>(registry_);
+    if (lua_state_) lua_state_->LoadMaterialScripts(*terrain_sim_);
+    InstallCollisionRelay();
 
     // Load action maps for objects with animations
     for (auto& [qid, obj_ptr] : registry_.GetAllObjects()) {
@@ -170,7 +177,16 @@ void Engine::GenerateTerrain(const ScenarioDef& scenario) {
     // Always build a fresh simulator — the previous one (if any) is bound to
     // the old terrain's dimensions, and regenerating could change them.
     // Start paused — user must click 1x/2x/etc. in the Simulation menu to run it.
-    terrain_sim_ = std::make_unique<TerrainSimulator>(registry_);
+    terrain_sim_      = std::make_unique<TerrainSimulator>(registry_);
+    terrain_renderer_->SetSimulator(terrain_sim_.get());
+    // Shared Box2D world + dynamic-body fragment manager + fracture tracker.
+    // All three live in both editor and gameplay modes so that crack/boom tools
+    // and falling-chunk physics work regardless of whether a scenario is loaded.
+    if (!world_)      world_ = std::make_unique<PhysicsWorld>();
+    dynamic_bodies_   = std::make_unique<DynamicBodyManager>(*world_, registry_);
+    fragment_tracker_ = std::make_unique<FragmentTracker>(registry_);
+    if (lua_state_) lua_state_->LoadMaterialScripts(*terrain_sim_);
+    InstallCollisionRelay();
     terrain_sim_accumulator_ = 0.0;
     if (!sim_running_) {
         sim_time_scale_ = 0.0f;
@@ -198,7 +214,13 @@ void Engine::UnloadTerrain() {
     // causes out-of-bounds writes if the next terrain has different dims and
     // the user paints before the first Update() re-scans.
     terrain_sim_.reset();
+    // Dynamic-body manager holds b2Body* pointers into world_; drop it and the
+    // fragment tracker before the world itself. world_ stays alive so a later
+    // GenerateTerrain can reuse the Box2D state (or be replaced cleanly).
+    dynamic_bodies_.reset();
+    fragment_tracker_.reset();
     terrain_sim_accumulator_ = 0.0;
+    queued_sim_steps_ = 0;
 }
 
 void Engine::SetTerrainCell(int x, int y,
@@ -426,17 +448,20 @@ void Engine::SimTick(double dt) {
     // Per-tick Lua callback (editor camera, shortcuts, etc.)
     if (tick_callback_) tick_callback_(dt);
 
-    // Terrain simulation runs in both editor and gameplay modes (when time_scale > 0)
+    // Terrain simulation runs in both editor and gameplay modes.
+    //
+    // Drives terrain sim, Box2D world, and DynamicBodyManager — all sim systems
+    // share the same time scale so slow-mo/fast-fwd halve/double them together.
     if (terrain_sim_ && terrain_ && sim_time_scale_ > 0.0f) {
         terrain_sim_accumulator_ += static_cast<double>(sim_time_scale_);
         while (terrain_sim_accumulator_ >= 1.0) {
-            terrain_sim_->Update(*terrain_);
-            if (terrain_sim_->HasChanges() && terrain_renderer_) {
-                for (auto& rect : terrain_sim_->GetDirtyRects())
-                    terrain_renderer_->UpdateRegion(rect.x, rect.y, rect.w, rect.h);
-            }
+            RunOneSimStep(static_cast<float>(dt));
             terrain_sim_accumulator_ -= 1.0;
         }
+    } else if (queued_sim_steps_ > 0 && terrain_sim_ && terrain_) {
+        // Pause+step: drain one queued tick per frame while paused.
+        --queued_sim_steps_;
+        RunOneSimStep(static_cast<float>(dt));
     }
 
     if (!sim_running_) return;
@@ -644,6 +669,145 @@ void Engine::AdvanceActions(double /*dt*/) {
                 entity.action_frame = 0;
         }
     });
+}
+
+// ─── Phase 3 helpers ──────────────────────────────────────────────────────────
+
+void Engine::RunOneSimStep(float dt) {
+    if (!terrain_ || !terrain_sim_) return;
+    terrain_sim_->Update(*terrain_);
+    if (dynamic_bodies_) dynamic_bodies_->Update(*terrain_, dt);
+    if (world_)          world_->Step(dt);
+    if (terrain_sim_->HasChanges() && terrain_renderer_) {
+        for (auto& rect : terrain_sim_->GetDirtyRects())
+            terrain_renderer_->UpdateRegion(rect.x, rect.y, rect.w, rect.h);
+    }
+}
+
+void Engine::InstallCollisionRelay() {
+    if (!world_) return;
+    // Route Box2D contacts through a single sink; forwarder invoked from
+    // PhysicsWorld::ContactRelay. The sink re-reads physics_collision_cb_
+    // each call so Lua can re-register at any time.
+    world_->SetCollisionCallback(
+        [this](EntityID eid, int mat_id, float speed_px_s) {
+            if (physics_collision_cb_) physics_collision_cb_(eid, mat_id, speed_px_s);
+        });
+}
+
+float Engine::GetCellTemperature(int x, int y) const {
+    if (!terrain_ || !terrain_sim_) return 0.0f;
+    return terrain_sim_->GetTemp(x, y, terrain_->GetWidth());
+}
+
+int Engine::GetCellHealth(int x, int y) const {
+    if (!terrain_ || !terrain_sim_) return 0;
+    return terrain_sim_->GetHealth(x, y, terrain_->GetWidth());
+}
+
+bool Engine::GetCellIgnited(int x, int y) const {
+    if (!terrain_ || !terrain_sim_) return false;
+    return terrain_sim_->IsIgnited(x, y, terrain_->GetWidth());
+}
+
+uint8_t Engine::GetCellCrack(int x, int y) const {
+    if (!terrain_ || !terrain_sim_) return 0;
+    return terrain_sim_->GetCrack(x, y, terrain_->GetWidth());
+}
+
+void Engine::SetCellTemperature(int x, int y, float t) {
+    if (!terrain_ || !terrain_sim_ || !terrain_->InBounds(x, y)) return;
+    terrain_sim_->SetTemp(x, y, terrain_->GetWidth(), t);
+    if (terrain_renderer_) terrain_renderer_->UpdateRegion(x, y, 1, 1);
+}
+
+void Engine::SetCellHealth(int x, int y, int hp) {
+    if (!terrain_ || !terrain_sim_ || !terrain_->InBounds(x, y)) return;
+    terrain_sim_->SetHealth(x, y, terrain_->GetWidth(), static_cast<int16_t>(hp));
+}
+
+void Engine::SetCellIgnited(int x, int y, bool on) {
+    if (!terrain_ || !terrain_sim_ || !terrain_->InBounds(x, y)) return;
+    terrain_sim_->SetIgnited(x, y, terrain_->GetWidth(), on);
+    if (terrain_renderer_) terrain_renderer_->UpdateRegion(x, y, 1, 1);
+}
+
+void Engine::ApplyDamageAt(int x, int y, int damage) {
+    if (!terrain_ || !terrain_sim_ || !fragment_tracker_ || !dynamic_bodies_) return;
+    uint8_t* crack = terrain_sim_->GetCrackOverlay();
+    if (!crack) return;
+    fragment_tracker_->ApplyDamage(*terrain_, crack, *dynamic_bodies_, x, y, damage);
+    if (terrain_renderer_) terrain_renderer_->UpdateRegion(x - 2, y - 2, 5, 5);
+    terrain_sim_->NotifyModified(x - 2, y - 2, 5, 5);
+}
+
+void Engine::TriggerExplosionAt(int x, int y, int radius, int strength) {
+    if (!terrain_ || !terrain_sim_) return;
+    terrain_sim_->TriggerExplosion(*terrain_, x, y, radius, strength);
+    if (terrain_renderer_)
+        terrain_renderer_->UpdateRegion(x - radius - 1, y - radius - 1,
+                                        2 * radius + 3, 2 * radius + 3);
+    // Newly-created detached chunks become dynamic bodies.
+    if (dynamic_bodies_) {
+        dynamic_bodies_->ScanForFloatingGroups(*terrain_,
+            x - radius - 2, y - radius - 2,
+            2 * radius + 5, 2 * radius + 5);
+    }
+}
+
+void Engine::SpawnParticle(const std::string& qid, int x, int y,
+                           float vx, float vy, int ttl) {
+    if (!terrain_ || !terrain_sim_ || !terrain_->InBounds(x, y)) return;
+    const auto* mat = registry_.GetMaterial(qid);
+    if (!mat) return;
+
+    Cell c = terrain_->GetCell(x, y);
+    c.material_id = mat->runtime_id;
+    terrain_->SetCell(x, y, c);
+
+    terrain_sim_->SpawnParticleAt(x, y, terrain_->GetWidth(), vx, vy, ttl);
+    terrain_sim_->NotifyModified(x, y, 1, 1);
+    terrain_sim_->InitMassRegion(*terrain_, x, y, 1, 1);
+    if (terrain_renderer_) terrain_renderer_->UpdateRegion(x, y, 1, 1);
+}
+
+bool Engine::GetMaterialConductsHeat(const std::string& qid) const {
+    const auto* m = registry_.GetMaterial(qid);
+    return m ? m->conducts_heat : true;
+}
+
+void Engine::SetMaterialConductsHeat(const std::string& qid, bool on) {
+    auto* m = registry_.GetMutableMaterial(qid);
+    if (!m) return;
+    m->conducts_heat = on;
+    if (terrain_sim_) terrain_sim_->SetConductsHeatLUT(m->runtime_id, on);
+}
+
+void Engine::SetRenderOverlay(const std::string& mode) {
+    if (!terrain_renderer_) return;
+    using O = TerrainRenderer::Overlay;
+    O o = O::None;
+    if      (mode == "diagnostics") o = O::Diagnostics;
+    else if (mode == "heatmap")     o = O::Heatmap;
+    else if (mode == "health")      o = O::Health;
+    else if (mode == "crack")       o = O::Crack;
+    else if (mode == "stain")       o = O::Stain;
+    terrain_renderer_->SetOverlay(o);
+    // Diagnostics is the existing chunk-border + collision-box HUD. Other
+    // overlays are colour passes blended into the chunk textures.
+    SetDebugOverlayVisible(o == O::Diagnostics);
+}
+
+std::string Engine::GetRenderOverlay() const {
+    if (!terrain_renderer_) return "none";
+    switch (terrain_renderer_->GetOverlay()) {
+        case TerrainRenderer::Overlay::Diagnostics: return "diagnostics";
+        case TerrainRenderer::Overlay::Heatmap:     return "heatmap";
+        case TerrainRenderer::Overlay::Health:      return "health";
+        case TerrainRenderer::Overlay::Crack:       return "crack";
+        case TerrainRenderer::Overlay::Stain:       return "stain";
+        default:                                    return "none";
+    }
 }
 
 void Engine::RenderEntities(SDL_Renderer* renderer, double alpha) {

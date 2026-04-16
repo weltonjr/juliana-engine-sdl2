@@ -8,10 +8,14 @@
 
 class Camera;
 class DefinitionRegistry;
+class TerrainSimulator;
 
 class TerrainRenderer {
 public:
     static constexpr int CHUNK_SIZE = 64;
+
+    // Visualization overlay modes
+    enum class Overlay { None = 0, Diagnostics, Heatmap, Health, Crack, Stain };
 
     TerrainRenderer(SDL_Renderer* renderer, const Terrain& terrain, const DefinitionRegistry* registry = nullptr);
     ~TerrainRenderer();
@@ -31,6 +35,13 @@ public:
     // Render debug overlay: chunk borders (green) + solid-cell overlay (red)
     void RenderDebugOverlay(SDL_Renderer* renderer, const Camera& camera);
 
+    // Attach simulator for stain/crack overlay blending during chunk rebuilds
+    void SetSimulator(const TerrainSimulator* sim) { simulator_ = sim; }
+
+    // Active overlay mode
+    void    SetOverlay(Overlay m) { overlay_ = m; FullRebuild(); }
+    Overlay GetOverlay() const    { return overlay_; }
+
     Color GetMaterialColor(MaterialID id) const;
     Color GetBackgroundColor(BackgroundID id) const;
     Color GetCellColor(const Cell& cell) const;
@@ -48,9 +59,13 @@ private:
     int ChunkIndex(int cx, int cy) const { return cy * chunks_x_ + cx; }
     uint32_t ColorToPixel(Color c) const;
 
+    uint32_t OverlayPixel(int wx, int wy) const;
+
     const Terrain& terrain_;
     const DefinitionRegistry* registry_;
+    const TerrainSimulator* simulator_ = nullptr;
     SDL_Renderer* renderer_;  // keep ref for lazy chunk rebuild
+    Overlay overlay_ = Overlay::None;
     int width_, height_;
     int chunks_x_, chunks_y_;
 

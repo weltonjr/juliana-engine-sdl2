@@ -24,7 +24,10 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/DavidMcLaughlin208/FallingSandJava/master/core/src/com/gdx/cellular/elements/liquid/Liquid.java\")",
       "Bash(curl -s \"https://raw.githubusercontent.com/DavidMcLaughlin208/FallingSandJava/master/core/src/com/gdx/cellular/elements/solid/movable/MovableSolid.java\")",
       "Bash(curl -s \"https://raw.githubusercontent.com/DavidMcLaughlin208/FallingSandJava/master/core/src/com/gdx/cellular/elements/gas/Gas.java\")",
-      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && cat {}')"
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && cat {}')",
+      "Bash(cmake -S /Users/mainuser/source/juliana-engine-sdl2 -B /Users/mainuser/source/juliana-engine-sdl2/build)",
+      "Bash(cmake --build /Users/mainuser/source/juliana-engine-sdl2/build)",
+      "Bash(cmake --build build -j)"
     ]
   }
 }

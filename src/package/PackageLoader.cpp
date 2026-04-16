@@ -129,24 +129,85 @@ void PackageLoader::ParseMaterial(const std::string& file_path, const std::strin
     // Behavior
     if (tbl.contains("behavior")) {
         auto& beh = *tbl["behavior"].as_table();
-        def->gravity = beh["gravity"].value_or(false);
-        def->flammable = beh["flammable"].value_or(false);
-        def->blast_resistance = beh["blast_resistance"].value_or(20);
-        def->flow_rate = beh["flow_rate"].value_or(0);
-        def->liquid_drag = beh["liquid_drag"].value_or(0.0f);
-        def->inertial_resistance = beh["inertial_resistance"].value_or(0.0f);
-        def->rise_rate = beh["rise_rate"].value_or(0);
-        def->dispersion = beh["dispersion"].value_or(0);
-        def->lifetime = beh["lifetime"].value_or(0);
-        def->dig_product = beh["dig_product"].value_or<std::string>("");
-        def->small_fragment = beh["small_fragment"].value_or<std::string>("");
-        def->min_fragment_pixels = beh["min_fragment_pixels"].value_or(8);
+        def->gravity              = beh["gravity"].value_or(false);
+        def->flammable            = beh["flammable"].value_or(false);
+        def->blast_resistance     = beh["blast_resistance"].value_or(20);
+        def->flow_rate            = beh["flow_rate"].value_or(0);
+        def->liquid_drag          = beh["liquid_drag"].value_or(0.0f);
+        def->inertial_resistance  = beh["inertial_resistance"].value_or(0.0f);
+        def->rise_rate            = beh["rise_rate"].value_or(0);
+        def->dispersion           = beh["dispersion"].value_or(0);
+        def->lifetime             = beh["lifetime"].value_or(0);
+        def->dig_product          = beh["dig_product"].value_or<std::string>("");
+        def->small_fragment       = beh["small_fragment"].value_or<std::string>("");
+        def->min_fragment_pixels  = beh["min_fragment_pixels"].value_or(8);
+        def->solidify_ticks       = beh["solidify_ticks"].value_or(0);
+        def->solidify_into        = beh["solidify_into"].value_or<std::string>("");
+        def->corrode_damage       = beh["corrode_damage"].value_or(0);
+        def->corrode_self         = beh["corrode_self"].value_or(false);
     }
 
-    // Check for script
+    // Temperature
+    if (tbl.contains("temperature")) {
+        auto& tmp = *tbl["temperature"].as_table();
+        def->heat_conductivity = tmp["heat_conductivity"].value_or(0.05f);
+        def->ambient_temp      = tmp["ambient_temp"].value_or(0.0f);
+        def->combustion_heat   = tmp["combustion_heat"].value_or(0.0f);
+        def->ignition_temp     = tmp["ignition_temp"].value_or(-1.0f);
+        def->conducts_heat     = tmp["conducts_heat"].value_or(true);
+    }
+
+    // Phase changes (array of tables: [[phase_change]])
+    if (tbl.contains("phase_change")) {
+        if (auto* arr = tbl["phase_change"].as_array()) {
+            for (auto& elem : *arr) {
+                if (auto* entry = elem.as_table()) {
+                    PhaseChangeRule rule;
+                    rule.threshold = (*entry)["temp"].value_or(0.0f);
+                    rule.above     = (*entry)["above"].value_or(true);
+                    rule.into      = (*entry)["into"].value_or<std::string>("");
+                    if (!rule.into.empty())
+                        def->phase_changes.push_back(std::move(rule));
+                }
+            }
+        }
+    }
+
+    // Health
+    if (tbl.contains("health")) {
+        auto& hlt = *tbl["health"].as_table();
+        def->max_health   = hlt["max_health"].value_or(0);
+        def->death_product = hlt["death_product"].value_or<std::string>("");
+    }
+
+    // Stain
+    if (tbl.contains("stain")) {
+        auto& stn = *tbl["stain"].as_table();
+        if (auto arr = stn["color"].as_array(); arr && arr->size() >= 3) {
+            def->stain_color.r = static_cast<uint8_t>((*arr)[0].value_or(0));
+            def->stain_color.g = static_cast<uint8_t>((*arr)[1].value_or(0));
+            def->stain_color.b = static_cast<uint8_t>((*arr)[2].value_or(0));
+        }
+        def->stain_strength  = stn["strength"].value_or(0.0f);
+        def->stain_fade_rate = stn["fade_rate"].value_or(0.005f);
+    }
+
+    // Fragmentation
+    if (tbl.contains("fragmentation")) {
+        auto& frg = *tbl["fragmentation"].as_table();
+        auto style_str = frg["style"].value_or<std::string>("none");
+        if (style_str == "grid")   def->frag_style = FragStyle::Grid;
+        else if (style_str == "random") def->frag_style = FragStyle::Random;
+        else                       def->frag_style = FragStyle::None;
+        def->frag_min_pixels = frg["min_pixels"].value_or(4);
+        def->frag_max_pixels = frg["max_pixels"].value_or(64);
+    }
+
+    // Script
     auto script_path = dir_path + "/script.lua";
     if (fs::exists(script_path)) {
-        // Store for future use
+        def->script_path = script_path;
+        // has_on_tick / has_on_contact / has_on_heat set by scripting system after LUT build
     }
 
     std::printf("  Material: %s (color: %d,%d,%d)\n",

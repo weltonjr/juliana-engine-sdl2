@@ -49,9 +49,57 @@ void DefinitionRegistry::RegisterBuiltins() {
     // Only engine-essential materials live here.
     //              id        name      state                 dens  fric  hard   R    G    B   cvar  trans  glow  grav  flam  blast flow  ldrag
     mat("Air",     "Air",    MaterialState::None,               0, 0.0f,  0,   135, 206, 235);
+    // Air does not conduct heat outward — prevents heat bleeding through empty space.
+    if (auto* air = GetMutableMaterial("base:Air")) air->conducts_heat = false;
     mat("Unknown", "Unknown",MaterialState::Solid,            100, 0.8f,  0,   255, 105, 180);
     mat("UnknownLiquid","Unknown Liquid",MaterialState::Liquid, 50, 0.2f, 0,   255, 150, 210, 0, 0.3f, false, true, false, 20, 3, 0.85f);
-   
+
+    // ── Engine-required reactive materials ────────────────────────────────────
+    // Fire and ExplosionSpark are registered here so the simulation system can
+    // spawn them without depending on any external package.
+    {
+        auto d          = std::make_unique<MaterialDef>();
+        d->id           = "Fire";
+        d->name         = "Fire";
+        d->qualified_id = "base:Fire";
+        d->state        = MaterialState::Gas;
+        d->density      = 1;
+        d->friction     = 0.0f;
+        d->color        = { 255, 100,  0, 255 };
+        d->color_variation = 20;
+        d->transparency = 0.5f;
+        d->gravity      = false;
+        d->rise_rate    = 1;
+        d->dispersion   = 3;
+        d->lifetime     = 90;
+        d->blast_resistance = 0;
+        d->combustion_heat  = 60.0f;
+        d->ambient_temp     = 800.0f;
+        d->heat_conductivity = 0.3f;
+        RegisterMaterial(std::move(d));
+    }
+    {
+        auto d          = std::make_unique<MaterialDef>();
+        d->id           = "ExplosionSpark";
+        d->name         = "Explosion Spark";
+        d->qualified_id = "base:ExplosionSpark";
+        d->state        = MaterialState::Gas;
+        d->density      = 1;
+        d->friction     = 0.0f;
+        d->color        = { 255, 180, 60, 255 };
+        d->color_variation = 10;
+        d->transparency = 0.4f;
+        d->gravity      = false;
+        d->rise_rate    = 3;
+        d->dispersion   = 4;
+        d->lifetime     = 15;
+        d->blast_resistance = 0;
+        d->combustion_heat  = 80.0f;
+        d->ambient_temp     = 600.0f;
+        d->heat_conductivity = 0.4f;
+        RegisterMaterial(std::move(d));
+    }
+
     // ── Backgrounds ───────────────────────────────────────────────────────────
     bg("Sky",      "Open Sky",   0,   0,   0,  0, true);
 
@@ -92,6 +140,11 @@ void DefinitionRegistry::RegisterObject(std::unique_ptr<ObjectDef> def) {
 }
 
 const MaterialDef* DefinitionRegistry::GetMaterial(const std::string& qualified_id) const {
+    auto it = materials_.find(qualified_id);
+    return it != materials_.end() ? it->second.get() : nullptr;
+}
+
+MaterialDef* DefinitionRegistry::GetMutableMaterial(const std::string& qualified_id) {
     auto it = materials_.find(qualified_id);
     return it != materials_.end() ? it->second.get() : nullptr;
 }

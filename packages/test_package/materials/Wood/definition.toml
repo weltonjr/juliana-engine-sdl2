@@ -1,0 +1,27 @@
+[material]
+id = "Wood"
+name = "Wood"
+
+[physics]
+state = "solid"
+density = 100
+friction = 0.7
+hardness = 40
+
+[visual]
+color = [130, 90, 50]
+color_variation = 10
+
+[behavior]
+gravity = false
+flammable = true
+blast_resistance = 10
+
+[temperature]
+heat_conductivity = 0.05
+ambient_temp = 0.0
+ignition_temp = 300.0
+
+[health]
+max_health = 150
+death_product = "test:Ember"

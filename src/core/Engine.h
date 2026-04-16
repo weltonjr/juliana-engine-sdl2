@@ -13,7 +13,10 @@
 #include "entity/EntityManager.h"
 #include "entity/ActionMap.h"
 #include "physics/PhysicsSystem.h"
+#include "physics/PhysicsWorld.h"
 #include "terrain/TerrainSimulator.h"
+#include "terrain/DynamicBodyManager.h"
+#include "terrain/FragmentTracker.h"
 #include "scenario/ScenarioDef.h"
 #include "scenario/ScenarioLoader.h"
 #include "render/DebugUI.h"
@@ -129,6 +132,49 @@ public:
     float GetSimTimeScale() const { return sim_time_scale_; }
     void  SetSimTimeScale(float s) { sim_time_scale_ = s; }
 
+    // ── Phase 3 — engine.sim surface (Lua helpers) ───────────────────────────
+    DynamicBodyManager* GetDynamicBodies()   const { return dynamic_bodies_.get();   }
+    FragmentTracker*    GetFragmentTracker() const { return fragment_tracker_.get(); }
+    PhysicsWorld*       GetPhysicsWorld()    const { return world_.get();            }
+
+    // Cell state accessors (null-guard terrain_ / terrain_sim_ internally)
+    float   GetCellTemperature(int x, int y) const;
+    int     GetCellHealth     (int x, int y) const;
+    bool    GetCellIgnited    (int x, int y) const;
+    uint8_t GetCellCrack      (int x, int y) const;
+    void    SetCellTemperature(int x, int y, float t);
+    void    SetCellHealth     (int x, int y, int hp);
+    void    SetCellIgnited    (int x, int y, bool on);
+
+    // Damage / explosion entry points
+    void ApplyDamageAt      (int x, int y, int damage);
+    void TriggerExplosionAt (int x, int y, int radius, int strength);
+
+    // Spawn an ephemeral particle cell with velocity and override TTL.
+    void SpawnParticle(const std::string& qid, int x, int y,
+                       float vx, float vy, int ttl);
+
+    // Pause/step support: when sim_time_scale_ <= 0, each call advances one tick.
+    void StepSim(int n) { if (n > 0) queued_sim_steps_ += n; }
+
+    // Per-material conducts_heat flag (runtime-mutable from Lua / editor)
+    bool GetMaterialConductsHeat(const std::string& qid) const;
+    void SetMaterialConductsHeat(const std::string& qid, bool on);
+
+    // Render overlay mode (strings: "none"|"diagnostics"|"heatmap"|"health"|"crack"|"stain")
+    void        SetRenderOverlay(const std::string& mode);
+    std::string GetRenderOverlay() const;
+
+    // Box2D → Lua collision callback.  Single sink; Lua subscribers may chain.
+    using PhysicsCollisionCallback =
+        std::function<void(EntityID, int /*material_id*/, float /*impact_speed*/)>;
+    void SetPhysicsCollisionCallback(PhysicsCollisionCallback cb) {
+        physics_collision_cb_ = std::move(cb);
+    }
+    const PhysicsCollisionCallback& GetPhysicsCollisionCallback() const {
+        return physics_collision_cb_;
+    }
+
 private:
     // --- Editor overlay ---
     void DrawWorldMarkers(const std::vector<WorldMarker>& markers);
@@ -173,12 +219,25 @@ private:
     // ── Simulation (null until sim_running_ = true) ─────────────────────────────
     bool sim_running_ = false;
 
-    std::unique_ptr<Terrain>          terrain_;
-    std::unique_ptr<TerrainRenderer>  terrain_renderer_;
-    std::unique_ptr<EntityManager>    entity_manager_;
-    std::unique_ptr<PhysicsSystem>    physics_;
-    std::unique_ptr<TerrainSimulator> terrain_sim_;
-    std::unique_ptr<DebugUI>          debug_ui_;
+    std::unique_ptr<Terrain>            terrain_;
+    std::unique_ptr<TerrainRenderer>    terrain_renderer_;
+    std::unique_ptr<EntityManager>      entity_manager_;
+    std::unique_ptr<PhysicsWorld>       world_;
+    std::unique_ptr<PhysicsSystem>      physics_;
+    std::unique_ptr<TerrainSimulator>   terrain_sim_;
+    std::unique_ptr<DynamicBodyManager> dynamic_bodies_;
+    std::unique_ptr<FragmentTracker>    fragment_tracker_;
+    std::unique_ptr<DebugUI>            debug_ui_;
+
+    // Pause-step queue — drained at a rate of one sim tick per call when paused.
+    int queued_sim_steps_ = 0;
+
+    // Cached collision relay callback (forwarded from PhysicsWorld contact listener).
+    PhysicsCollisionCallback physics_collision_cb_;
+    void InstallCollisionRelay();
+
+    // One-shot sim tick helper used by StepSim + normal accumulator path.
+    void RunOneSimStep(float dt);
 
     uint32_t last_terrain_seed_ = 0;  // actual seed used by last GenerateTerrain call
     std::vector<WorldMarker> editor_markers_;   // pushed by Lua each tick

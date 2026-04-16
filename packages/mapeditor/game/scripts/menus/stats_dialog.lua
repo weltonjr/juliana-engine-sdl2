@@ -19,7 +19,7 @@ local M = {}
 -- Panel geometry — top-right corner, just below the menu bar, left of the
 -- properties panel so it never overlaps. Width/height tuned to the current
 -- row layout.
-local W, H = 220, 210
+local W, H = 220, 246
 
 function M.build(screen, state)
     -- Anchor: right-aligned, below the menu bar, with an 8 px margin on all sides.
@@ -49,6 +49,8 @@ function M.build(screen, state)
     row("Seed:",         y) y = y + ROW
     row("Chunks A/T:",   y) y = y + ROW
     row("Sim speed:",    y) y = y + ROW
+    row("Dyn bodies:",   y) y = y + ROW
+    row("Viewport T:",   y) y = y + ROW
 
     local hud = {}
 
@@ -80,10 +82,33 @@ function M.build(screen, state)
             local active = engine.sim.get_active_chunks()
             local total  = engine.sim.get_total_chunks()
             rows["Chunks A/T:"].text = active .. " / " .. total
+
+            rows["Dyn bodies:"].text = tostring(engine.sim.dynamic_body_count())
+
+            -- Mean viewport temperature: sample a grid of ~400 cells
+            local cam_x = engine.camera.get_x()
+            local cam_y = engine.camera.get_y()
+            local vw    = math.floor(tw / engine.camera.get_zoom())
+            local vh    = math.floor(th / engine.camera.get_zoom())
+            local step  = math.max(1, math.floor(math.sqrt(vw * vh / 400)))
+            local sum_t, cnt = 0, 0
+            for sy = 0, vh - 1, step do
+                for sx = 0, vw - 1, step do
+                    local gx = math.floor(cam_x + sx)
+                    local gy = math.floor(cam_y + sy)
+                    if gx >= 0 and gx < tw and gy >= 0 and gy < th then
+                        sum_t = sum_t + engine.sim.get_temperature(gx, gy)
+                        cnt = cnt + 1
+                    end
+                end
+            end
+            rows["Viewport T:"].text = cnt > 0 and string.format("%.1f", sum_t / cnt) or "-"
         else
             rows["Map:"].text        = "-"
             rows["Painted:"].text    = "-"
             rows["Chunks A/T:"].text = "-"
+            rows["Dyn bodies:"].text = "-"
+            rows["Viewport T:"].text = "-"
         end
 
         rows["Overrides:"].text = tostring(state.overrides and #state.overrides or 0)

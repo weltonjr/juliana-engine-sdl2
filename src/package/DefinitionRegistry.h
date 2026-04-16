@@ -22,6 +22,7 @@ public:
 
     // Lookup by qualified ID ("base:Dirt")
     const MaterialDef* GetMaterial(const std::string& qualified_id) const;
+    MaterialDef*       GetMutableMaterial(const std::string& qualified_id);
     const BackgroundDef* GetBackground(const std::string& qualified_id) const;
     const ProcedureDef* GetProcedure(const std::string& qualified_id) const;
     const ObjectDef* GetObject(const std::string& qualified_id) const;

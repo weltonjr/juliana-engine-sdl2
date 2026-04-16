@@ -17,3 +17,18 @@ color_variation = 5
 gravity = true
 flow_rate = 3
 liquid_drag = 0.85
+blast_resistance = 2
+
+[temperature]
+heat_conductivity = 0.5
+ambient_temp = 0.0
+
+[[phase_change]]
+temp = 0.0
+above = false
+into = "test:Ice"
+
+[[phase_change]]
+temp = 100.0
+above = true
+into = "test:Steam"

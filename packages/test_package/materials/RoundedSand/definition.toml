@@ -1,6 +1,6 @@
 [material]
-id = "Sand"
-name = "Sand"
+id = "RoundedSand"
+name = "Rounded Sand"
 
 [physics]
 state = "powder"
@@ -16,5 +16,5 @@ color_variation = 12
 gravity = true
 flammable = false
 blast_resistance = 5
-inertial_resistance = 0.4
+inertial_resistance = 0
 dig_product = "test:Sand"

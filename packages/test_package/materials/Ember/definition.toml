@@ -1,0 +1,25 @@
+[material]
+id = "Ember"
+name = "Ember"
+
+[physics]
+state = "powder"
+density = 30
+friction = 0.3
+hardness = 0
+
+[visual]
+color = [200, 80, 20]
+color_variation = 30
+
+[behavior]
+gravity = true
+flammable = true
+blast_resistance = 2
+lifetime = 120
+
+[temperature]
+heat_conductivity = 0.2
+ambient_temp = 0.0
+combustion_heat = 40.0
+ignition_temp = 0.0
