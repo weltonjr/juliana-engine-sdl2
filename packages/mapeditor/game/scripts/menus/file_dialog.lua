@@ -8,112 +8,92 @@
 -- Pushes a modal UIScreen listing matches; clicking one calls on_select(path)
 -- and pops the screen.
 
-local layout = require("util/layout")
+local layout  = require("util/layout")
+local widgets = require("util/widgets")
 
 local M = {}
 
-local WIN_W  = layout.WIN_W
-local WIN_H  = layout.WIN_H
-local DLG_W  = 600
-local DLG_H  = 420
-local DLG_X  = (WIN_W - DLG_W) / 2
-local DLG_Y  = (WIN_H - DLG_H) / 2
-local ROW_H  = 28
-local MAX_VISIBLE = 12   -- rows visible at once without scrolling
+local WIN_W       = layout.WIN_W
+local WIN_H       = layout.WIN_H
+local DLG_W       = 600
+local ROW_H       = 28
+local MAX_VISIBLE = 12
 
 function M.show(search_dir, on_select)
-    -- Gather scenario.json files
-    local files = engine.fs.list_dir(search_dir, ".json")
+    local files   = engine.fs.list_dir(search_dir, ".json")
     local matches = {}
     for _, f in ipairs(files) do
-        if f.name == "scenario.json" then
-            matches[#matches + 1] = f
-        end
+        if f.name == "scenario.json" then matches[#matches + 1] = f end
     end
 
-    -- Size dialog to fit content (capped at MAX_VISIBLE rows)
     local visible_rows = math.max(1, math.min(#matches, MAX_VISIBLE))
-    local HEADER_H = 30
-    local FOOTER_H = 50
-    local list_h   = visible_rows * ROW_H
-    local dlg_h    = HEADER_H + list_h + FOOTER_H
-    local dlg_y    = (WIN_H - dlg_h) / 2
+    local HEADER_H, FOOTER_H = 30, 50
+    local list_h = visible_rows * ROW_H
+    local dlg_h  = HEADER_H + list_h + FOOTER_H
+    local dlg_x, dlg_y = layout.center(DLG_W, dlg_h)
 
-    local screen = engine.ui.create_screen("file_dialog")
+    local screen   = engine.ui.create_screen("file_dialog")
+    local backdrop = widgets.frame(screen,   { x = 0, y = 0, w = WIN_W, h = WIN_H })
+    local dlg      = widgets.frame(backdrop, { x = dlg_x, y = dlg_y, w = DLG_W, h = dlg_h })
 
-    -- Semi-transparent backdrop
-    local backdrop = screen:add_frame(0, 0, WIN_W, WIN_H)
+    widgets.label(dlg, { text = "Open Scenario", x = 10, y = 8 })
 
-    -- Dialog box
-    local dlg = backdrop:add_frame(DLG_X, dlg_y, DLG_W, dlg_h)
+    local LIST_X, LIST_Y, LIST_W = 10, HEADER_H, DLG_W - 20
+    local list_frame = widgets.frame(dlg, { x = LIST_X, y = LIST_Y, w = LIST_W, h = list_h })
 
-    dlg:add_label("Open Scenario", 10, 8)
+    local scroll_offset = 0
 
-    -- Scrollable list area
-    local LIST_X  = 10
-    local LIST_Y  = HEADER_H
-    local LIST_W  = DLG_W - 20
-    local LIST_H  = list_h
-    local list_frame = dlg:add_frame(LIST_X, LIST_Y, LIST_W, LIST_H)
-
-    local scroll_offset = 0   -- first visible item index (0-based)
-
-    -- Build list item buttons
     local item_btns = {}
     for i, f in ipairs(matches) do
-        local display = f.path  -- show full path for clarity
-        local btn = list_frame:add_button(display, 0, (i-1) * ROW_H, LIST_W - 2, ROW_H - 2)
-        btn.text_left = true
-        btn.visible = false  -- will be shown by refresh
-        item_btns[i] = btn
-        btn:on_click(function()
-            engine.ui.pop_screen()
-            if on_select then on_select(f.path) end
-        end)
+        item_btns[i] = widgets.button(list_frame, {
+            text      = f.path,
+            text_left = true,
+            visible   = false,
+            x = 0, y = (i - 1) * ROW_H, w = LIST_W - 2, h = ROW_H - 2,
+            on_click  = function()
+                engine.ui.pop_screen()
+                if on_select then on_select(f.path) end
+            end,
+        })
     end
 
-    -- Refresh visible buttons based on scroll_offset
     local function refresh()
         for i, btn in ipairs(item_btns) do
-            local row = i - 1  -- 0-based
+            local row = i - 1
             btn.visible = (row >= scroll_offset and row < scroll_offset + MAX_VISIBLE)
-            -- Reposition visible buttons
-            if btn.visible then
-                btn.y = (row - scroll_offset) * ROW_H
-            end
+            if btn.visible then btn.y = (row - scroll_offset) * ROW_H end
         end
     end
     refresh()
 
-    -- Show empty message if no files found
     if #matches == 0 then
-        list_frame:add_label("No scenario files found in: " .. search_dir, 4, 10)
+        widgets.label(list_frame, {
+            text = "No scenario files found in: " .. search_dir,
+            x = 4, y = 10,
+        })
     end
 
-    -- Cancel button
-    local cancel_btn = dlg:add_button("Cancel", DLG_W - 100, dlg_h - 36, 90, 28)
-    cancel_btn:on_click(function()
-        engine.ui.pop_screen()
-    end)
+    widgets.button(dlg, {
+        text = "Cancel", x = DLG_W - 100, y = dlg_h - 36, w = 90, h = 28,
+        on_click = function() engine.ui.pop_screen() end,
+    })
 
-    -- Scroll up / down buttons
     if #matches > MAX_VISIBLE then
-        local up_btn   = dlg:add_button("^", DLG_W - 16, LIST_Y, 14, 14)
-        local down_btn = dlg:add_button("v", DLG_W - 16, LIST_Y + LIST_H - 16, 14, 14)
-        up_btn:on_click(function()
-            scroll_offset = math.max(0, scroll_offset - 1)
-            refresh()
-        end)
-        down_btn:on_click(function()
-            scroll_offset = math.min(#matches - MAX_VISIBLE, scroll_offset + 1)
-            refresh()
-        end)
+        widgets.button(dlg, {
+            text = "^", x = DLG_W - 16, y = LIST_Y, w = 14, h = 14,
+            on_click = function()
+                scroll_offset = math.max(0, scroll_offset - 1)
+                refresh()
+            end,
+        })
+        widgets.button(dlg, {
+            text = "v", x = DLG_W - 16, y = LIST_Y + list_h - 16, w = 14, h = 14,
+            on_click = function()
+                scroll_offset = math.min(#matches - MAX_VISIBLE, scroll_offset + 1)
+                refresh()
+            end,
+        })
     end
-
-    -- Register scroll-wheel support via tick callback wrapper
-    -- (the editor_screen tick callback is replaced while this dialog is open,
-    --  then restored when it closes — handled by the caller if needed)
-    local prev_tick = nil  -- placeholder; editor_screen manages tick callbacks
 
     engine.ui.show_screen(screen)
 end

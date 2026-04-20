@@ -8,84 +8,68 @@
 --   -- in tick_callback: if state.stats_hud then state.stats_hud.update() end
 --   -- menu action:      state.stats_hud.toggle()
 
-local layout = require("util/layout")
+local layout  = require("util/layout")
+local widgets = require("util/widgets")
 
-local WIN_W  = layout.WIN_W
-local MENU_H = layout.MENU_H
+local WIN_W   = layout.WIN_W
+local MENU_H  = layout.MENU_H
 local PANEL_W = layout.PANEL_W or 260
 
 local M = {}
 
--- Panel geometry — top-right corner, just below the menu bar, left of the
--- properties panel so it never overlaps. Width/height tuned to the current
--- row layout.
 local W, H = 220, 246
 
+local ROWS = {
+    "FPS:", "Map:", "Painted:", "Overrides:", "Entities:",
+    "Seed:", "Chunks A/T:", "Sim speed:", "Dyn bodies:", "Viewport T:",
+}
+
 function M.build(screen, state)
-    -- Anchor: right-aligned, below the menu bar, with an 8 px margin on all sides.
-    -- The x is recomputed in update() so the HUD follows the panel's visible state.
     local panel_right = state.panel_visible and (WIN_W - PANEL_W) or WIN_W
     local X = panel_right - W - 8
     local Y = MENU_H + 8
 
-    local frame = screen:add_frame(X, Y, W, H)
-    frame.visible = false  -- hidden by default; menu toggles it
+    local frame = widgets.frame(screen, { x = X, y = Y, w = W, h = H, visible = false })
 
-    frame:add_label("[ Stats ]", 10, 8)
+    widgets.label(frame, { text = "[ Stats ]", x = 10, y = 8 })
 
-    local rows = {}
-    local function row(label, y)
-        frame:add_label(label, 10, y)
-        local val = frame:add_label("-", 120, y)
-        rows[label] = val
+    local next_y = layout.stack_v(28, 18)
+    local values = {}
+    for _, label in ipairs(ROWS) do
+        local y = next_y()
+        widgets.label(frame, { text = label, x = 10,  y = y })
+        values[label] = widgets.label(frame, { text = "-", x = 120, y = y })
     end
-
-    local ROW, y = 18, 28
-    row("FPS:",          y) y = y + ROW
-    row("Map:",          y) y = y + ROW
-    row("Painted:",      y) y = y + ROW
-    row("Overrides:",    y) y = y + ROW
-    row("Entities:",     y) y = y + ROW
-    row("Seed:",         y) y = y + ROW
-    row("Chunks A/T:",   y) y = y + ROW
-    row("Sim speed:",    y) y = y + ROW
-    row("Dyn bodies:",   y) y = y + ROW
-    row("Viewport T:",   y) y = y + ROW
 
     local hud = {}
 
-    -- Throttle the expensive solid-cell count; refresh the cheap stats every tick.
-    local slow_accum = 0.0
-    local solid_cells_cache = 0
+    local slow_accum, solid_cells_cache = 0.0, 0
 
     function hud.update(dt)
         if not frame.visible then return end
 
-        -- Keep the HUD anchored to the visible viewport edge
         local right = state.panel_visible and (WIN_W - PANEL_W) or WIN_W
         frame.x = right - W - 8
 
-        rows["FPS:"].text = tostring(engine.get_fps())
+        values["FPS:"].text = tostring(engine.get_fps())
 
         if engine.terrain.is_loaded() then
             local tw = engine.terrain.get_width()
             local th = engine.terrain.get_height()
-            rows["Map:"].text = tw .. "x" .. th
+            values["Map:"].text = tw .. "x" .. th
 
             slow_accum = slow_accum + (dt or 0.016)
             if slow_accum >= 0.5 then
                 solid_cells_cache = engine.get_solid_cell_count()
                 slow_accum = 0.0
             end
-            rows["Painted:"].text = tostring(solid_cells_cache)
+            values["Painted:"].text = tostring(solid_cells_cache)
 
             local active = engine.sim.get_active_chunks()
             local total  = engine.sim.get_total_chunks()
-            rows["Chunks A/T:"].text = active .. " / " .. total
+            values["Chunks A/T:"].text = active .. " / " .. total
+            values["Dyn bodies:"].text = tostring(engine.sim.dynamic_body_count())
 
-            rows["Dyn bodies:"].text = tostring(engine.sim.dynamic_body_count())
-
-            -- Mean viewport temperature: sample a grid of ~400 cells
             local cam_x = engine.camera.get_x()
             local cam_y = engine.camera.get_y()
             local vw    = math.floor(tw / engine.camera.get_zoom())
@@ -102,26 +86,26 @@ function M.build(screen, state)
                     end
                 end
             end
-            rows["Viewport T:"].text = cnt > 0 and string.format("%.1f", sum_t / cnt) or "-"
+            values["Viewport T:"].text = cnt > 0 and string.format("%.1f", sum_t / cnt) or "-"
         else
-            rows["Map:"].text        = "-"
-            rows["Painted:"].text    = "-"
-            rows["Chunks A/T:"].text = "-"
-            rows["Dyn bodies:"].text = "-"
-            rows["Viewport T:"].text = "-"
+            values["Map:"].text        = "-"
+            values["Painted:"].text    = "-"
+            values["Chunks A/T:"].text = "-"
+            values["Dyn bodies:"].text = "-"
+            values["Viewport T:"].text = "-"
         end
 
-        rows["Overrides:"].text = tostring(state.overrides and #state.overrides or 0)
-        rows["Entities:"].text  = tostring(state.entities  and #state.entities  or 0)
+        values["Overrides:"].text = tostring(state.overrides and #state.overrides or 0)
+        values["Entities:"].text  = tostring(state.entities  and #state.entities  or 0)
 
         local seed = state.locked_seed
                   or (state.panel_handle and state.panel_handle.get_config and
                       state.panel_handle.get_config().seed)
                   or 0
-        rows["Seed:"].text = tostring(seed)
+        values["Seed:"].text = tostring(seed)
 
         local s = engine.sim.get_time_scale()
-        rows["Sim speed:"].text = (s == 0) and "Paused" or (s .. "x")
+        values["Sim speed:"].text = (s == 0) and "Paused" or (s .. "x")
     end
 
     function hud.show()   frame.visible = true;  hud.update(0) end
@@ -138,9 +122,7 @@ end
 -- Back-compat shim: old call sites used StatsDialog.show(state). Redirect it
 -- to a toggle so the View menu entry still works.
 function M.show(state)
-    if state and state.stats_hud then
-        state.stats_hud.toggle()
-    end
+    if state and state.stats_hud then state.stats_hud.toggle() end
 end
 
 return M

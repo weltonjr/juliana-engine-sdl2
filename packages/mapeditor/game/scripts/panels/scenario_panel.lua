@@ -6,6 +6,7 @@
 -- Zero C++ changes required.
 
 local PropertyPanel = require("panels/property_panel")
+local widgets       = require("util/widgets")
 
 local M = {}
 
@@ -76,13 +77,13 @@ function M.build(parent_frame, on_regenerate)
     end)
 
     local btn_y = panel_handle.content_height + 8
-    local gen_btn = parent_frame:add_button(
-        "Generate", 6, btn_y, W - 12, 28)
-
-    gen_btn:on_click(function()
-        local v = panel_handle.get_values()
-        on_regenerate(M.build_map_config(v))
-    end)
+    local gen_btn = widgets.button(parent_frame, {
+        text = "Generate", x = 6, y = btn_y, w = W - 12, h = 28,
+        on_click = function()
+            local v = panel_handle.get_values()
+            on_regenerate(M.build_map_config(v))
+        end,
+    })
 
     local handle = {}
     local locked = false

@@ -6,6 +6,7 @@
 --   [Edit toolbar 96px left | Terrain viewport | Properties panel 290px right]
 
 local layout        = require("util/layout")
+local widgets       = require("util/widgets")
 local MenuBar       = require("menus/menu_bar")
 local ScenarioPanel = require("panels/scenario_panel")
 local EditToolbar   = require("panels/edit_toolbar")
@@ -123,29 +124,31 @@ end
 
 local function save_dialog()
     local W, H = 480, 120
-    local X = (WIN_W - W) / 2
-    local Y = (WIN_H - H) / 2
+    local X, Y = layout.center(W, H)
 
     local screen = engine.ui.create_screen("save_dialog")
-    local bg     = screen:add_frame(0, 0, WIN_W, WIN_H)
-    local dlg    = bg:add_frame(X, Y, W, H)
+    local bg     = widgets.frame(screen, { x = 0, y = 0, w = WIN_W, h = WIN_H })
+    local dlg    = widgets.frame(bg,     { x = X, y = Y, w = W,     h = H })
 
-    dlg:add_label("Save scenario to path:", 10, 12)
-    local inp = dlg:add_input("packages/mapeditor/maps/map1/scenario.json",
-                               10, 34, W - 20, 26)
-    if state.current_path then inp.value = state.current_path end
+    widgets.label(dlg, { text = "Save scenario to path:", x = 10, y = 12 })
+    local inp = widgets.input(dlg, {
+        placeholder = "packages/mapeditor/maps/map1/scenario.json",
+        value       = state.current_path,
+        x = 10, y = 34, w = W - 20, h = 26,
+    })
 
-    local ok_btn     = dlg:add_button("Save",   W - 110, H - 36, 50, 28)
-    local cancel_btn = dlg:add_button("Cancel", W - 56,  H - 36, 50, 28)
-
-    ok_btn:on_click(function()
-        local path = inp.value
-        engine.ui.pop_screen()
-        do_save(path)
-    end)
-    cancel_btn:on_click(function()
-        engine.ui.pop_screen()
-    end)
+    widgets.button(dlg, {
+        text = "Save", x = W - 110, y = H - 36, w = 50, h = 28,
+        on_click = function()
+            local path = inp.value
+            engine.ui.pop_screen()
+            do_save(path)
+        end,
+    })
+    widgets.button(dlg, {
+        text = "Cancel", x = W - 56, y = H - 36, w = 50, h = 28,
+        on_click = function() engine.ui.pop_screen() end,
+    })
 
     engine.ui.show_screen(screen)
 end

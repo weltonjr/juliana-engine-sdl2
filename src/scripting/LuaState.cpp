@@ -2,14 +2,13 @@
 #include <sol/sol.hpp>
 
 #include "scripting/LuaState.h"
+#include "scripting/LuaUIBindings.h"
 #include "scripting/SimCell.h"
 #include "terrain/TerrainSimulator.h"
 #include "package/DefinitionRegistry.h"
 #include "core/Engine.h"
 #include "core/EngineLog.h"
 #include "ui/UISystem.h"
-#include "ui/UIElement.h"
-#include "ui/UIScreen.h"
 #include "scenario/ScenarioDef.h"
 #include "scenario/ScenarioLoader.h"
 #include <nlohmann/json.hpp>
@@ -269,112 +268,6 @@ void LuaState::BindAPI() {
                        sol::lib::string, sol::lib::table, sol::lib::io,
                        sol::lib::package);
 
-    // ── UIElement ──────────────────────────────────────────────────────────────
-    lua.new_usertype<UIElement>("UIElement",
-        sol::no_constructor,
-        "id",      sol::property(
-            [](const UIElement& el) { return el.id; },
-            [](UIElement& el, const std::string& v) { el.id = v; }),
-        "visible", sol::property(
-            [](const UIElement& el) { return el.visible; },
-            [](UIElement& el, bool v) { el.visible = v; }),
-        "x",       sol::property(
-            [](const UIElement& el) { return el.x; },
-            [](UIElement& el, int v) { el.x = v; }),
-        "y",       sol::property(
-            [](const UIElement& el) { return el.y; },
-            [](UIElement& el, int v) { el.y = v; }),
-        "w",       sol::property(
-            [](const UIElement& el) { return el.w; },
-            [](UIElement& el, int v) { el.w = v; }),
-        "h",       sol::property(
-            [](const UIElement& el) { return el.h; },
-            [](UIElement& el, int v) { el.h = v; }),
-        "text",    sol::property(
-            [](const UIElement& el) { return el.text; },
-            [](UIElement& el, const std::string& v) { el.text = v; }),
-        "value",   sol::property(
-            [](const UIElement& el) { return el.value; },
-            [](UIElement& el, const std::string& v) { el.value = v; }),
-        "focused", sol::property(
-            [](const UIElement& el) { return el.focused; },
-            [](UIElement& el, bool v) { el.focused = v; }),
-        "text_left", sol::property(
-            [](const UIElement& el) { return el.text_left; },
-            [](UIElement& el, bool v) { el.text_left = v; }),
-        "disabled", sol::property(
-            [](const UIElement& el) { return el.disabled; },
-            [](UIElement& el, bool v) { el.disabled = v; }),
-
-        "on_click", [](UIElement& el, sol::function fn) {
-            el.on_click = [fn]() mutable {
-                auto res = fn();
-                if (!res.valid()) {
-                    sol::error err = res;
-                    std::string msg = std::string("[Lua error in on_click] ") + err.what();
-                    EngineLog::Log(msg);
-                    std::fprintf(stderr, "%s\n", msg.c_str());
-                }
-            };
-        },
-        "on_change", [](UIElement& el, sol::function fn) {
-            el.on_change = [fn](const std::string& s) mutable {
-                auto res = fn(s);
-                if (!res.valid()) {
-                    sol::error err = res;
-                    std::string msg = std::string("[Lua error in on_change] ") + err.what();
-                    EngineLog::Log(msg);
-                    std::fprintf(stderr, "%s\n", msg.c_str());
-                }
-            };
-        },
-
-        // Wrappers accept double so that Lua float division results (e.g. WIN_W/2)
-        // are accepted without SOL_ALL_SAFETIES_ON complaining about non-integer floats.
-        "add_frame",  [](UIElement& el, double x, double y, double w, double h) {
-            return el.AddFrame(static_cast<int>(x), static_cast<int>(y),
-                               static_cast<int>(w), static_cast<int>(h));
-        },
-        "add_button", [](UIElement& el, const std::string& text,
-                         double x, double y, double w, double h) {
-            return el.AddButton(text, static_cast<int>(x), static_cast<int>(y),
-                                     static_cast<int>(w), static_cast<int>(h));
-        },
-        "add_label",  [](UIElement& el, const std::string& text, double x, double y) {
-            return el.AddLabel(text, static_cast<int>(x), static_cast<int>(y));
-        },
-        "add_input",  [](UIElement& el, const std::string& placeholder,
-                         double x, double y, double w, double h) {
-            return el.AddInput(placeholder, static_cast<int>(x), static_cast<int>(y),
-                                            static_cast<int>(w), static_cast<int>(h));
-        }
-    );
-
-    // ── UIScreen ───────────────────────────────────────────────────────────────
-    lua.new_usertype<UIScreen>("UIScreen",
-        sol::no_constructor,
-        "name",       sol::property(
-            [](const UIScreen& s) { return s.name; },
-            [](UIScreen& s, const std::string& v) { s.name = v; }),
-        "add_frame",  [](UIScreen& s, double x, double y, double w, double h) {
-            return s.AddFrame(static_cast<int>(x), static_cast<int>(y),
-                              static_cast<int>(w), static_cast<int>(h));
-        },
-        "add_button", [](UIScreen& s, const std::string& text,
-                         double x, double y, double w, double h) {
-            return s.AddButton(text, static_cast<int>(x), static_cast<int>(y),
-                                     static_cast<int>(w), static_cast<int>(h));
-        },
-        "add_label",  [](UIScreen& s, const std::string& text, double x, double y) {
-            return s.AddLabel(text, static_cast<int>(x), static_cast<int>(y));
-        },
-        "add_input",  [](UIScreen& s, const std::string& placeholder,
-                         double x, double y, double w, double h) {
-            return s.AddInput(placeholder, static_cast<int>(x), static_cast<int>(y),
-                                           static_cast<int>(w), static_cast<int>(h));
-        }
-    );
-
     // ── engine global table ────────────────────────────────────────────────────
     auto eng = lua.create_named_table("engine");
 
@@ -396,25 +289,8 @@ void LuaState::BindAPI() {
         });
     };
 
-    // ── engine.ui table ────────────────────────────────────────────────────────
-    auto ui_tbl = eng.create("ui");
-
-    ui_tbl["create_screen"] = [&ui](const std::string& name) -> std::shared_ptr<UIScreen> {
-        return ui.CreateScreen(name);
-    };
-    ui_tbl["show_screen"] = [&ui](std::shared_ptr<UIScreen> screen) {
-        ui.ShowScreen(screen);
-    };
-    ui_tbl["pop_screen"] = [&ui]() {
-        ui.PopScreen();
-    };
-    // Returns true if the current mouse position is over an interactive UI
-    // element on the top screen. Scripts should use this to suppress world
-    // clicks (e.g. map painting) when the user is interacting with UI.
-    ui_tbl["is_mouse_over"] = [&ui, &engine]() -> bool {
-        return ui.IsPointOverUI(engine.GetInput().GetMouseX(),
-                                engine.GetInput().GetMouseY());
-    };
+    // UI usertypes + engine.ui live in LuaUIBindings.cpp.
+    RegisterLuaUIBindings(lua, ui, engine);
 
     // ── engine.terrain table ───────────────────────────────────────────────────
     auto ter_tbl = eng.create("terrain");
@@ -515,13 +391,9 @@ void LuaState::BindAPI() {
 
     // ── engine.debug table ───────────────────────────────────────────────────
     auto dbg_tbl = eng.create("debug");
-    // Legacy compat: set_visible(true) ≡ set_overlay("diagnostics")
-    dbg_tbl["set_visible"] = [&engine](bool v) {
-        engine.SetRenderOverlay(v ? "diagnostics" : "none");
-    };
-    dbg_tbl["is_visible"]  = [&engine]() -> bool { return engine.IsDebugOverlayVisible(); };
     dbg_tbl["set_overlay"] = [&engine](const std::string& m) { engine.SetRenderOverlay(m); };
     dbg_tbl["get_overlay"] = [&engine]() -> std::string { return engine.GetRenderOverlay(); };
+    dbg_tbl["is_overlay_visible"] = [&engine]() -> bool { return engine.IsDebugOverlayVisible(); };
 
     // ── engine.sim table ─────────────────────────────────────────────────────
     auto sim_tbl = eng.create("sim");
