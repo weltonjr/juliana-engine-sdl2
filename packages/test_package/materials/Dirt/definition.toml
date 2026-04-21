@@ -1,0 +1,19 @@
+[material]
+id = "Dirt"
+name = "Dirt"
+
+[physics]
+state = "solid"
+density = 100
+friction = 0.8
+hardness = 30
+
+[visual]
+color = [139, 119, 101]
+color_variation = 10
+
+[behavior]
+gravity = false
+flammable = false
+blast_resistance = 20
+dig_product = "base:Earth"

@@ -1,62 +1,128 @@
--- Stats dialog for the map editor.
--- Shows FPS, terrain dimensions, painted cell count, entity count, and current seed.
+-- Stats HUD for the map editor.
+-- A small, non-modal panel pinned to the top-right corner showing live stats
+-- (FPS, map size, painted cells, entity count, seed, active/inactive chunks).
 --
 -- Usage:
---   local StatsDialog = require("menus/stats_dialog")
---   StatsDialog.show(state)   -- state = editor_screen state table
+--   local StatsHUD = require("menus/stats_dialog")
+--   state.stats_hud = StatsHUD.build(screen, state)
+--   -- in tick_callback: if state.stats_hud then state.stats_hud.update() end
+--   -- menu action:      state.stats_hud.toggle()
 
-local layout = require("util/layout")
+local layout  = require("util/layout")
+local widgets = require("util/widgets")
 
-local WIN_W  = layout.WIN_W
-local WIN_H  = layout.WIN_H
+local WIN_W   = layout.WIN_W
+local MENU_H  = layout.MENU_H
+local PANEL_W = layout.PANEL_W or 260
 
 local M = {}
 
-function M.show(state)
-    local W, H = 320, 230
-    local X = (WIN_W - W) / 2
-    local Y = (WIN_H - H) / 2
+local W, H = 220, 246
 
-    -- Collect stats at open time (solid cell count is expensive — call once)
-    local fps         = engine.get_fps()
-    local tw          = engine.terrain.get_width()
-    local th          = engine.terrain.get_height()
-    local total_cells = tw * th
-    local solid_cells = engine.terrain.is_loaded() and engine.get_solid_cell_count() or 0
-    local ent_count   = state.entities and #state.entities or 0
-    local seed        = state.locked_seed
-                        or (state.panel_handle and state.panel_handle.get_config().seed)
-                        or 0
+local ROWS = {
+    "FPS:", "Map:", "Painted:", "Overrides:", "Entities:",
+    "Seed:", "Chunks A/T:", "Sim speed:", "Dyn bodies:", "Viewport T:",
+}
 
-    local screen = engine.ui.create_screen("stats_dialog")
-    local bg     = screen:add_frame(0, 0, WIN_W, WIN_H)
-    local dlg    = bg:add_frame(X, Y, W, H)
+function M.build(screen, state)
+    local panel_right = state.panel_visible and (WIN_W - PANEL_W) or WIN_W
+    local X = panel_right - W - 8
+    local Y = MENU_H + 8
 
-    local function row(label, value, y)
-        dlg:add_label(label, 12, y)
-        dlg:add_label(tostring(value), 160, y)
+    local frame = widgets.frame(screen, { x = X, y = Y, w = W, h = H, visible = false })
+
+    widgets.label(frame, { text = "[ Stats ]", x = 10, y = 8 })
+
+    local next_y = layout.stack_v(28, 18)
+    local values = {}
+    for _, label in ipairs(ROWS) do
+        local y = next_y()
+        widgets.label(frame, { text = label, x = 10,  y = y })
+        values[label] = widgets.label(frame, { text = "-", x = 120, y = y })
     end
 
-    dlg:add_label("[ Map Statistics ]", 12, 10)
+    local hud = {}
 
-    local y = 36
-    local ROW = 22
+    local slow_accum, solid_cells_cache = 0.0, 0
 
-    row("FPS:",             fps,                                       y) y = y + ROW
-    row("Map size:",        tw .. " × " .. th .. " cells",             y) y = y + ROW
-    row("Total cells:",     string.format("%d", total_cells),          y) y = y + ROW
-    row("Painted cells:",   string.format("%d", solid_cells),          y) y = y + ROW
-    row("Override count:",  state.overrides and #state.overrides or 0, y) y = y + ROW
-    row("Entities:",        ent_count,                                 y) y = y + ROW
-    row("Seed:",            seed,                                      y) y = y + ROW
-    row("Seed locked:",     tostring(state.seed_locked or false),       y) y = y + ROW
+    function hud.update(dt)
+        if not frame.visible then return end
 
-    local close_btn = dlg:add_button("Close", W - 80, H - 36, 68, 28)
-    close_btn:on_click(function()
-        engine.ui.pop_screen()
-    end)
+        local right = state.panel_visible and (WIN_W - PANEL_W) or WIN_W
+        frame.x = right - W - 8
 
-    engine.ui.show_screen(screen)
+        values["FPS:"].text = tostring(engine.get_fps())
+
+        if engine.terrain.is_loaded() then
+            local tw = engine.terrain.get_width()
+            local th = engine.terrain.get_height()
+            values["Map:"].text = tw .. "x" .. th
+
+            slow_accum = slow_accum + (dt or 0.016)
+            if slow_accum >= 0.5 then
+                solid_cells_cache = engine.get_solid_cell_count()
+                slow_accum = 0.0
+            end
+            values["Painted:"].text = tostring(solid_cells_cache)
+
+            local active = engine.sim.get_active_chunks()
+            local total  = engine.sim.get_total_chunks()
+            values["Chunks A/T:"].text = active .. " / " .. total
+            values["Dyn bodies:"].text = tostring(engine.sim.dynamic_body_count())
+
+            local cam_x = engine.camera.get_x()
+            local cam_y = engine.camera.get_y()
+            local vw    = math.floor(tw / engine.camera.get_zoom())
+            local vh    = math.floor(th / engine.camera.get_zoom())
+            local step  = math.max(1, math.floor(math.sqrt(vw * vh / 400)))
+            local sum_t, cnt = 0, 0
+            for sy = 0, vh - 1, step do
+                for sx = 0, vw - 1, step do
+                    local gx = math.floor(cam_x + sx)
+                    local gy = math.floor(cam_y + sy)
+                    if gx >= 0 and gx < tw and gy >= 0 and gy < th then
+                        sum_t = sum_t + engine.sim.get_temperature(gx, gy)
+                        cnt = cnt + 1
+                    end
+                end
+            end
+            values["Viewport T:"].text = cnt > 0 and string.format("%.1f", sum_t / cnt) or "-"
+        else
+            values["Map:"].text        = "-"
+            values["Painted:"].text    = "-"
+            values["Chunks A/T:"].text = "-"
+            values["Dyn bodies:"].text = "-"
+            values["Viewport T:"].text = "-"
+        end
+
+        values["Overrides:"].text = tostring(state.overrides and #state.overrides or 0)
+        values["Entities:"].text  = tostring(state.entities  and #state.entities  or 0)
+
+        local seed = state.locked_seed
+                  or (state.panel_handle and state.panel_handle.get_config and
+                      state.panel_handle.get_config().seed)
+                  or 0
+        values["Seed:"].text = tostring(seed)
+
+        local s = engine.sim.get_time_scale()
+        values["Sim speed:"].text = (s == 0) and "Paused" or (s .. "x")
+    end
+
+    function hud.show()   frame.visible = true;  hud.update(0) end
+    function hud.hide()   frame.visible = false end
+    function hud.toggle()
+        frame.visible = not frame.visible
+        if frame.visible then hud.update(0) end
+    end
+    function hud.is_visible() return frame.visible end
+
+    return hud
+end
+
+-- Back-compat shim: old call sites used StatsDialog.show(state). Redirect it
+-- to a toggle so the View menu entry still works.
+function M.show(state)
+    if state and state.stats_hud then state.stats_hud.toggle() end
 end
 
 return M

@@ -17,4 +17,4 @@ script = "scripts/main.lua"
 
 # Content packages needed for terrain generation (materials, backgrounds)
 [packages]
-load = ["packages/test_entities"]
+load = ["packages/test_package"]

@@ -122,7 +122,7 @@ engine.quit()                        -- request shutdown
 
 local screen = engine.ui.create_screen("main")
 local btn = screen:add_button("Play", 100, 100, 120, 40)
-btn:on_click(function() engine.log("clicked") end)
+btn.on_click = function() engine.log("clicked") end
 engine.ui.show_screen(screen)
 engine.ui.pop_screen()
 ```

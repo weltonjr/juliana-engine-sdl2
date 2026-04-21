@@ -2,11 +2,13 @@
 #include <sol/sol.hpp>
 
 #include "scripting/LuaState.h"
+#include "scripting/LuaUIBindings.h"
+#include "scripting/SimCell.h"
+#include "terrain/TerrainSimulator.h"
+#include "package/DefinitionRegistry.h"
 #include "core/Engine.h"
 #include "core/EngineLog.h"
 #include "ui/UISystem.h"
-#include "ui/UIElement.h"
-#include "ui/UIScreen.h"
 #include "scenario/ScenarioDef.h"
 #include "scenario/ScenarioLoader.h"
 #include <nlohmann/json.hpp>
@@ -266,112 +268,6 @@ void LuaState::BindAPI() {
                        sol::lib::string, sol::lib::table, sol::lib::io,
                        sol::lib::package);
 
-    // ── UIElement ──────────────────────────────────────────────────────────────
-    lua.new_usertype<UIElement>("UIElement",
-        sol::no_constructor,
-        "id",      sol::property(
-            [](const UIElement& el) { return el.id; },
-            [](UIElement& el, const std::string& v) { el.id = v; }),
-        "visible", sol::property(
-            [](const UIElement& el) { return el.visible; },
-            [](UIElement& el, bool v) { el.visible = v; }),
-        "x",       sol::property(
-            [](const UIElement& el) { return el.x; },
-            [](UIElement& el, int v) { el.x = v; }),
-        "y",       sol::property(
-            [](const UIElement& el) { return el.y; },
-            [](UIElement& el, int v) { el.y = v; }),
-        "w",       sol::property(
-            [](const UIElement& el) { return el.w; },
-            [](UIElement& el, int v) { el.w = v; }),
-        "h",       sol::property(
-            [](const UIElement& el) { return el.h; },
-            [](UIElement& el, int v) { el.h = v; }),
-        "text",    sol::property(
-            [](const UIElement& el) { return el.text; },
-            [](UIElement& el, const std::string& v) { el.text = v; }),
-        "value",   sol::property(
-            [](const UIElement& el) { return el.value; },
-            [](UIElement& el, const std::string& v) { el.value = v; }),
-        "focused", sol::property(
-            [](const UIElement& el) { return el.focused; },
-            [](UIElement& el, bool v) { el.focused = v; }),
-        "text_left", sol::property(
-            [](const UIElement& el) { return el.text_left; },
-            [](UIElement& el, bool v) { el.text_left = v; }),
-        "disabled", sol::property(
-            [](const UIElement& el) { return el.disabled; },
-            [](UIElement& el, bool v) { el.disabled = v; }),
-
-        "on_click", [](UIElement& el, sol::function fn) {
-            el.on_click = [fn]() mutable {
-                auto res = fn();
-                if (!res.valid()) {
-                    sol::error err = res;
-                    std::string msg = std::string("[Lua error in on_click] ") + err.what();
-                    EngineLog::Log(msg);
-                    std::fprintf(stderr, "%s\n", msg.c_str());
-                }
-            };
-        },
-        "on_change", [](UIElement& el, sol::function fn) {
-            el.on_change = [fn](const std::string& s) mutable {
-                auto res = fn(s);
-                if (!res.valid()) {
-                    sol::error err = res;
-                    std::string msg = std::string("[Lua error in on_change] ") + err.what();
-                    EngineLog::Log(msg);
-                    std::fprintf(stderr, "%s\n", msg.c_str());
-                }
-            };
-        },
-
-        // Wrappers accept double so that Lua float division results (e.g. WIN_W/2)
-        // are accepted without SOL_ALL_SAFETIES_ON complaining about non-integer floats.
-        "add_frame",  [](UIElement& el, double x, double y, double w, double h) {
-            return el.AddFrame(static_cast<int>(x), static_cast<int>(y),
-                               static_cast<int>(w), static_cast<int>(h));
-        },
-        "add_button", [](UIElement& el, const std::string& text,
-                         double x, double y, double w, double h) {
-            return el.AddButton(text, static_cast<int>(x), static_cast<int>(y),
-                                     static_cast<int>(w), static_cast<int>(h));
-        },
-        "add_label",  [](UIElement& el, const std::string& text, double x, double y) {
-            return el.AddLabel(text, static_cast<int>(x), static_cast<int>(y));
-        },
-        "add_input",  [](UIElement& el, const std::string& placeholder,
-                         double x, double y, double w, double h) {
-            return el.AddInput(placeholder, static_cast<int>(x), static_cast<int>(y),
-                                            static_cast<int>(w), static_cast<int>(h));
-        }
-    );
-
-    // ── UIScreen ───────────────────────────────────────────────────────────────
-    lua.new_usertype<UIScreen>("UIScreen",
-        sol::no_constructor,
-        "name",       sol::property(
-            [](const UIScreen& s) { return s.name; },
-            [](UIScreen& s, const std::string& v) { s.name = v; }),
-        "add_frame",  [](UIScreen& s, double x, double y, double w, double h) {
-            return s.AddFrame(static_cast<int>(x), static_cast<int>(y),
-                              static_cast<int>(w), static_cast<int>(h));
-        },
-        "add_button", [](UIScreen& s, const std::string& text,
-                         double x, double y, double w, double h) {
-            return s.AddButton(text, static_cast<int>(x), static_cast<int>(y),
-                                     static_cast<int>(w), static_cast<int>(h));
-        },
-        "add_label",  [](UIScreen& s, const std::string& text, double x, double y) {
-            return s.AddLabel(text, static_cast<int>(x), static_cast<int>(y));
-        },
-        "add_input",  [](UIScreen& s, const std::string& placeholder,
-                         double x, double y, double w, double h) {
-            return s.AddInput(placeholder, static_cast<int>(x), static_cast<int>(y),
-                                           static_cast<int>(w), static_cast<int>(h));
-        }
-    );
-
     // ── engine global table ────────────────────────────────────────────────────
     auto eng = lua.create_named_table("engine");
 
@@ -393,18 +289,8 @@ void LuaState::BindAPI() {
         });
     };
 
-    // ── engine.ui table ────────────────────────────────────────────────────────
-    auto ui_tbl = eng.create("ui");
-
-    ui_tbl["create_screen"] = [&ui](const std::string& name) -> std::shared_ptr<UIScreen> {
-        return ui.CreateScreen(name);
-    };
-    ui_tbl["show_screen"] = [&ui](std::shared_ptr<UIScreen> screen) {
-        ui.ShowScreen(screen);
-    };
-    ui_tbl["pop_screen"] = [&ui]() {
-        ui.PopScreen();
-    };
+    // UI usertypes + engine.ui live in LuaUIBindings.cpp.
+    RegisterLuaUIBindings(lua, ui, engine);
 
     // ── engine.terrain table ───────────────────────────────────────────────────
     auto ter_tbl = eng.create("terrain");
@@ -505,13 +391,65 @@ void LuaState::BindAPI() {
 
     // ── engine.debug table ───────────────────────────────────────────────────
     auto dbg_tbl = eng.create("debug");
-    dbg_tbl["set_visible"] = [&engine](bool v) { engine.SetDebugOverlayVisible(v); };
-    dbg_tbl["is_visible"]  = [&engine]() -> bool { return engine.IsDebugOverlayVisible(); };
+    dbg_tbl["set_overlay"] = [&engine](const std::string& m) { engine.SetRenderOverlay(m); };
+    dbg_tbl["get_overlay"] = [&engine]() -> std::string { return engine.GetRenderOverlay(); };
+    dbg_tbl["is_overlay_visible"] = [&engine]() -> bool { return engine.IsDebugOverlayVisible(); };
 
     // ── engine.sim table ─────────────────────────────────────────────────────
     auto sim_tbl = eng.create("sim");
     sim_tbl["get_time_scale"] = [&engine]() -> float { return engine.GetSimTimeScale(); };
     sim_tbl["set_time_scale"] = [&engine](float s) { engine.SetSimTimeScale(s); };
+    sim_tbl["get_active_chunks"] = [&engine]() -> int {
+        auto* s = engine.GetTerrainSimulator();
+        return s ? s->GetActiveChunkCount() : 0;
+    };
+    sim_tbl["get_total_chunks"] = [&engine]() -> int {
+        auto* s = engine.GetTerrainSimulator();
+        return s ? s->GetTotalChunkCount() : 0;
+    };
+    // Phase 3 — per-cell accessors
+    sim_tbl["get_temperature"]   = [&engine](int x, int y) -> float { return engine.GetCellTemperature(x, y); };
+    sim_tbl["get_health"]        = [&engine](int x, int y) -> int   { return engine.GetCellHealth(x, y); };
+    sim_tbl["is_ignited"]        = [&engine](int x, int y) -> bool  { return engine.GetCellIgnited(x, y); };
+    sim_tbl["get_crack"]         = [&engine](int x, int y) -> int   { return static_cast<int>(engine.GetCellCrack(x, y)); };
+    sim_tbl["set_temperature"]   = [&engine](int x, int y, float t) { engine.SetCellTemperature(x, y, t); };
+    sim_tbl["set_health"]        = [&engine](int x, int y, int h)   { engine.SetCellHealth(x, y, h); };
+    sim_tbl["ignite"]            = [&engine](int x, int y)          { engine.SetCellIgnited(x, y, true); };
+    sim_tbl["extinguish"]        = [&engine](int x, int y)          { engine.SetCellIgnited(x, y, false); };
+    sim_tbl["apply_damage"]      = [&engine](int x, int y, int d)   { engine.ApplyDamageAt(x, y, d); };
+    sim_tbl["trigger_explosion"] = [&engine](int x, int y, int r, int s) { engine.TriggerExplosionAt(x, y, r, s); };
+    sim_tbl["dynamic_body_count"]= [&engine]() -> int {
+        auto* dbm = engine.GetDynamicBodies(); return dbm ? dbm->ActiveBodyCount() : 0;
+    };
+    sim_tbl["pause"]  = [&engine]()      { engine.SetSimTimeScale(0.0f); };
+    sim_tbl["resume"] = [&engine]()      { engine.SetSimTimeScale(1.0f); };
+    sim_tbl["step"]   = [&engine](int n) { engine.StepSim(n); };
+    sim_tbl["spawn_particle"] = [&engine](const std::string& q, int x, int y,
+                                          float vx, float vy, int ttl) {
+        engine.SpawnParticle(q, x, y, vx, vy, ttl);
+    };
+
+    // ── engine.materials table ───────────────────────────────────────────────
+    auto mat_tbl = eng.create("materials");
+    mat_tbl["get_conducts_heat"] = [&engine](const std::string& q) -> bool {
+        return engine.GetMaterialConductsHeat(q);
+    };
+    mat_tbl["set_conducts_heat"] = [&engine](const std::string& q, bool on) {
+        engine.SetMaterialConductsHeat(q, on);
+    };
+
+    // ── engine.physics table ─────────────────────────────────────────────────
+    auto phys_tbl = eng.create("physics");
+    phys_tbl["on_collision"] = [&engine](sol::function fn) {
+        engine.SetPhysicsCollisionCallback(
+            [fn](EntityID e, int mat, float v) mutable {
+                auto res = fn(static_cast<int>(e), mat, v);
+                if (!res.valid()) {
+                    sol::error err = res;
+                    std::fprintf(stderr, "[on_collision error] %s\n", err.what());
+                }
+            });
+    };
 
     // ── engine.input table ────────────────────────────────────────────────────
     auto inp_tbl = eng.create("input");
@@ -812,4 +750,102 @@ void LuaState::BindAPI() {
             return out;
         } catch (...) { return sol::nil; }
     };
+
+    // ── SimCell (material simulation proxy) ───────────────────────────────────
+    lua.new_usertype<SimCell>("SimCell",
+        sol::no_constructor,
+        "material_id",    &SimCell::material_id,
+        "temperature",    &SimCell::temperature,
+        "get_health",     &SimCell::get_health,
+        "is_ignited",     &SimCell::is_ignited,
+        "convert_to",     &SimCell::convert_to,
+        "deal_damage",    &SimCell::deal_damage,
+        "add_temperature",&SimCell::add_temperature,
+        "ignite_cell",    &SimCell::ignite_cell,
+        "extinguish_cell",&SimCell::extinguish_cell,
+        "neighbor",       [](SimCell& sc, int dx, int dy) -> sol::optional<SimCell> {
+            auto opt = sc.neighbor(dx, dy);
+            if (opt) return *opt;
+            return sol::nullopt;
+        }
+    );
+}
+
+// ─── Material script loader ───────────────────────────────────────────────────
+
+void LuaState::LoadMaterialScripts(TerrainSimulator& sim) {
+    auto& lua      = impl_->lua;
+    auto& registry = impl_->engine.GetRegistry();
+
+    namespace fs = std::filesystem;
+
+    for (int i = 0; i < 256; i++) {
+        const auto* mat = registry.GetMaterialByRuntimeID(static_cast<MaterialID>(i));
+        if (!mat || mat->script_path.empty()) continue;
+        if (!fs::exists(mat->script_path)) continue;
+
+        // Load the material script into its own isolated environment.
+        // The script must return a table with optional fields: on_tick, on_contact, on_heat.
+        sol::environment env(lua, sol::create, lua.globals());
+        auto result = lua.safe_script_file(mat->script_path, env,
+            [](lua_State*, sol::protected_function_result pfr) { return pfr; });
+
+        if (!result.valid()) {
+            sol::error err = result;
+            std::fprintf(stderr, "[material script] %s: %s\n",
+                         mat->script_path.c_str(), err.what());
+            continue;
+        }
+
+        // Script should return a table
+        if (result.get_type() != sol::type::table) {
+            std::fprintf(stderr, "[material script] %s: must return a table\n",
+                         mat->script_path.c_str());
+            continue;
+        }
+
+        sol::table tbl = result;
+
+        if (auto fn = tbl.get<sol::optional<sol::function>>("on_tick"); fn) {
+            const_cast<MaterialDef*>(mat)->has_on_tick = true;
+            sol::function captured = *fn;
+            sim.SetOnTickCallback(i, [captured](SimCell& sc) mutable {
+                auto res = captured(sc);
+                if (!res.valid()) {
+                    sol::error err = res;
+                    std::fprintf(stderr, "[on_tick error] %s\n", err.what());
+                }
+            });
+            std::printf("  Loaded on_tick script for material %s (id=%d)\n",
+                        mat->qualified_id.c_str(), i);
+        }
+
+        if (auto fn = tbl.get<sol::optional<sol::function>>("on_contact"); fn) {
+            const_cast<MaterialDef*>(mat)->has_on_contact = true;
+            sol::function captured = *fn;
+            sim.SetOnContactCallback(i, [captured](SimCell& a, SimCell& b) mutable {
+                auto res = captured(a, b);
+                if (!res.valid()) {
+                    sol::error err = res;
+                    std::fprintf(stderr, "[on_contact error] %s\n", err.what());
+                }
+            });
+            std::printf("  Loaded on_contact script for material %s (id=%d)\n",
+                        mat->qualified_id.c_str(), i);
+        }
+
+        if (auto fn = tbl.get<sol::optional<sol::function>>("on_heat"); fn) {
+            const_cast<MaterialDef*>(mat)->has_on_heat = true;
+            sol::function captured = *fn;
+            sim.SetOnHeatCallback(i, [captured](SimCell& sc, float delta) mutable {
+                auto res = captured(sc, delta);
+                if (!res.valid()) {
+                    sol::error err = res;
+                    std::fprintf(stderr, "[on_heat error] %s\n", err.what());
+                }
+            });
+            std::printf("  Loaded on_heat script for material %s (id=%d)\n",
+                        mat->qualified_id.c_str(), i);
+        }
+    }
 }

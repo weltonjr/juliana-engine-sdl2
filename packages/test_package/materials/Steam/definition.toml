@@ -1,0 +1,30 @@
+[material]
+id = "Steam"
+name = "Steam"
+
+[physics]
+state = "gas"
+density = 1
+friction = 0.0
+hardness = 0
+
+[visual]
+color = [200, 220, 240]
+transparency = 0.6
+color_variation = 10
+
+[behavior]
+gravity = true
+blast_resistance = 0
+rise_rate = 2
+dispersion = 3
+lifetime = 300
+
+[temperature]
+heat_conductivity = 0.2
+ambient_temp = 100.0
+
+[[phase_change]]
+temp = 90.0
+above = false
+into = "test:Water"

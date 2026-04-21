@@ -1,0 +1,20 @@
+[material]
+id = "RoundedSand"
+name = "Rounded Sand"
+
+[physics]
+state = "powder"
+density = 90
+friction = 0.6
+hardness = 10
+
+[visual]
+color = [210, 190, 140]
+color_variation = 12
+
+[behavior]
+gravity = true
+flammable = false
+blast_resistance = 5
+inertial_resistance = 0
+dig_product = "test:Sand"

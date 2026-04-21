@@ -6,6 +6,7 @@
 --   [Edit toolbar 96px left | Terrain viewport | Properties panel 290px right]
 
 local layout        = require("util/layout")
+local widgets       = require("util/widgets")
 local MenuBar       = require("menus/menu_bar")
 local ScenarioPanel = require("panels/scenario_panel")
 local EditToolbar   = require("panels/edit_toolbar")
@@ -108,6 +109,9 @@ local function do_save(path)
         tbl.entities = ent_list
     end
 
+    -- TODO(phase-4): persist overlay state (temperature, health, ignited, crack,
+    -- stain) per dirty region so reopening a map restores all reactive state.
+
     local ok = engine.fs.write_text(path, engine.json.encode(tbl))
     if ok then
         engine.log("Saved: " .. path)
@@ -120,29 +124,31 @@ end
 
 local function save_dialog()
     local W, H = 480, 120
-    local X = (WIN_W - W) / 2
-    local Y = (WIN_H - H) / 2
+    local X, Y = layout.center(W, H)
 
     local screen = engine.ui.create_screen("save_dialog")
-    local bg     = screen:add_frame(0, 0, WIN_W, WIN_H)
-    local dlg    = bg:add_frame(X, Y, W, H)
+    local bg     = widgets.frame(screen, { x = 0, y = 0, w = WIN_W, h = WIN_H })
+    local dlg    = widgets.frame(bg,     { x = X, y = Y, w = W,     h = H })
 
-    dlg:add_label("Save scenario to path:", 10, 12)
-    local inp = dlg:add_input("packages/mapeditor/maps/map1/scenario.json",
-                               10, 34, W - 20, 26)
-    if state.current_path then inp.value = state.current_path end
+    widgets.label(dlg, { text = "Save scenario to path:", x = 10, y = 12 })
+    local inp = widgets.input(dlg, {
+        placeholder = "packages/mapeditor/maps/map1/scenario.json",
+        value       = state.current_path,
+        x = 10, y = 34, w = W - 20, h = 26,
+    })
 
-    local ok_btn     = dlg:add_button("Save",   W - 110, H - 36, 50, 28)
-    local cancel_btn = dlg:add_button("Cancel", W - 56,  H - 36, 50, 28)
-
-    ok_btn:on_click(function()
-        local path = inp.value
-        engine.ui.pop_screen()
-        do_save(path)
-    end)
-    cancel_btn:on_click(function()
-        engine.ui.pop_screen()
-    end)
+    widgets.button(dlg, {
+        text = "Save", x = W - 110, y = H - 36, w = 50, h = 28,
+        on_click = function()
+            local path = inp.value
+            engine.ui.pop_screen()
+            do_save(path)
+        end,
+    })
+    widgets.button(dlg, {
+        text = "Cancel", x = W - 56, y = H - 36, w = 50, h = 28,
+        on_click = function() engine.ui.pop_screen() end,
+    })
 
     engine.ui.show_screen(screen)
 end
@@ -364,6 +370,9 @@ local function register_tick()
         local mx = engine.input.mouse_x()
         local my = engine.input.mouse_y()
 
+        -- Refresh the live stats HUD (no-op when hidden)
+        if state.stats_hud then state.stats_hud.update(dt) end
+
         -- ── Right-click drag: camera pan ──────────────────────────────────────
         local rmb = engine.input.mouse_button(3)
         if rmb then
@@ -412,20 +421,31 @@ local function register_tick()
 
         local panel_right = WIN_W - (state.panel_visible and PANEL_W or 0)
         local in_viewport = (mx > TOOLBAR_W and mx < panel_right and my > MENU_H)
+        -- Suppress paint / entity tools when the cursor is over an interactive
+        -- UI element (open menu dropdown, popup dialog button, etc.) so that
+        -- clicking a menu entry doesn't also paint the map underneath it.
+        if in_viewport and engine.ui.is_mouse_over() then
+            in_viewport = false
+        end
 
         -- ── Tooltip (always update while terrain loaded) ───────────────────────
         if state.tooltip_label then
             if in_viewport then
                 local wx, wy = screen_to_world(mx, my)
                 local cell   = engine.terrain.get_cell(wx, wy)
-                local tip    = (cell and cell.material_id ~= "") and cell.material_id or ""
-                -- Also show nearby entity
-                local eidx   = find_nearest_entity(mx, my)
-                if eidx then
-                    local ename = state.entities[eidx].def_id or ""
-                    tip = (tip ~= "") and (tip .. " | " .. ename) or ename
+                local parts  = {}
+                if cell and cell.material_id ~= "" then parts[#parts+1] = cell.material_id end
+                if engine.terrain.is_loaded() then
+                    parts[#parts+1] = string.format("T=%.1f", engine.sim.get_temperature(wx, wy))
+                    local hp = engine.sim.get_health(wx, wy)
+                    if hp > 0 then parts[#parts+1] = string.format("HP=%d", hp) end
+                    if engine.sim.is_ignited(wx, wy) then parts[#parts+1] = "[BURNING]" end
+                    local crack = engine.sim.get_crack(wx, wy)
+                    if crack > 0 then parts[#parts+1] = string.format("crack=%d", crack) end
                 end
-                state.tooltip_label.text = tip
+                local eidx   = find_nearest_entity(mx, my)
+                if eidx then parts[#parts+1] = state.entities[eidx].def_id or "" end
+                state.tooltip_label.text = table.concat(parts, " | ")
                 state.tooltip_label.x    = mx + 14
                 state.tooltip_label.y    = my - 4
             else
@@ -624,6 +644,36 @@ local function register_tick()
                 lock_panel_if_needed()
                 engine.log("Removed entity #" .. eidx)
             end
+
+        -- ── Sim tools ────────────────────────────────────────────────────────
+        elseif lmb and engine.terrain.is_loaded() then
+            local wx, wy = screen_to_world(mx, my)
+            local bsize  = state.brush_size or 1
+            local half   = math.floor(bsize / 2)
+
+            local function for_each_brush_cell(cx, cy, r, fn)
+                for dy2 = -r, r do for dx2 = -r, r do
+                    if dx2*dx2 + dy2*dy2 <= r*r then fn(cx + dx2, cy + dy2) end
+                end end
+            end
+
+            if tool == "ignite" then
+                for_each_brush_cell(wx, wy, half, function(bx, by) engine.sim.ignite(bx, by) end)
+            elseif tool == "extinguish" then
+                for_each_brush_cell(wx, wy, half, function(bx, by) engine.sim.extinguish(bx, by) end)
+            elseif tool == "damage" then
+                for_each_brush_cell(wx, wy, half, function(bx, by) engine.sim.apply_damage(bx, by, 50) end)
+            elseif tool == "heat" then
+                for_each_brush_cell(wx, wy, half, function(bx, by)
+                    engine.sim.set_temperature(bx, by, engine.sim.get_temperature(bx, by) + 100)
+                end)
+            elseif tool == "chill" then
+                for_each_brush_cell(wx, wy, half, function(bx, by)
+                    engine.sim.set_temperature(bx, by, engine.sim.get_temperature(bx, by) - 100)
+                end)
+            elseif tool == "explode" and lmb_press then
+                engine.sim.trigger_explosion(wx, wy, bsize * 4, 8)
+            end
         end
 
         push_entity_markers()
@@ -650,6 +700,10 @@ local function build_editor_screen(initial_tbl)
     if initial_tbl then
         panel_handle.set_from_scenario(initial_tbl)
     end
+
+    -- Stats HUD — non-modal, top-right corner panel. Hidden by default; toggled
+    -- by the View → Stats menu entry. Refreshed per-tick from register_tick().
+    state.stats_hud = StatsDialog.build(screen, state)
 
     -- Tooltip label — floats near the mouse cursor
     state.tooltip_label = screen:add_label("", 0, 0)
@@ -682,15 +736,24 @@ local function build_editor_screen(initial_tbl)
             state.panel_visible = not state.panel_visible
             panel_frame.visible = state.panel_visible
         end,
-        toggle_debug = function()
-            engine.debug.set_visible(not engine.debug.is_visible())
+        toggle_overlay = function(mode)
+            -- Toggle: if current overlay matches, turn off; otherwise set it.
+            local cur = engine.debug.get_overlay()
+            if cur == mode then
+                engine.debug.set_overlay("none")
+            else
+                engine.debug.set_overlay(mode)
+            end
         end,
         sim_speed = function(s)
             engine.sim.set_time_scale(s)
             engine.log("Simulation speed: " .. (s == 0 and "Paused" or (s .. "x")))
+            if state.menu_bar_ctrl and state.menu_bar_ctrl.set_active_speed then
+                state.menu_bar_ctrl.set_active_speed(s)
+            end
         end,
         on_about = function() AboutDialog.show() end,
-        on_stats = function() StatsDialog.show(state) end,
+        on_stats = function() if state.stats_hud then state.stats_hud.toggle() end end,
     }
 
     state.menu_bar_ctrl = MenuBar.build(screen, actions)

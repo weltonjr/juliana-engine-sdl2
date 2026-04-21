@@ -17,7 +17,17 @@
       "Bash(screencapture -x /tmp/game2.png)",
       "Bash(ls /Users/mainuser/source/juliana-engine-sdl2/packages/test_entities/*/definition.toml)",
       "Bash(brew list:*)",
-      "Bash(brew install:*)"
+      "Bash(brew install:*)",
+      "Bash(./build/juliana packages/mapeditor/game/definition.toml)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/DavidMcLaughlin208/FallingSandJava/master/core/src/com/gdx/cellular/elements/Element.java\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/DavidMcLaughlin208/FallingSandJava/master/core/src/com/gdx/cellular/elements/liquid/Liquid.java\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/DavidMcLaughlin208/FallingSandJava/master/core/src/com/gdx/cellular/elements/solid/movable/MovableSolid.java\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/DavidMcLaughlin208/FallingSandJava/master/core/src/com/gdx/cellular/elements/gas/Gas.java\")",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && cat {}')",
+      "Bash(cmake -S /Users/mainuser/source/juliana-engine-sdl2 -B /Users/mainuser/source/juliana-engine-sdl2/build)",
+      "Bash(cmake --build /Users/mainuser/source/juliana-engine-sdl2/build)",
+      "Bash(cmake --build build -j)"
     ]
   }
 }

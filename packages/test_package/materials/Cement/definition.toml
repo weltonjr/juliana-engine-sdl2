@@ -1,0 +1,25 @@
+[material]
+id = "Cement"
+name = "Cement"
+
+[physics]
+state = "liquid"
+density = 120
+friction = 0.5
+hardness = 0
+
+[visual]
+color = [160, 155, 150]
+color_variation = 8
+
+[behavior]
+gravity = true
+blast_resistance = 15
+flow_rate = 1
+liquid_drag = 0.4
+solidify_ticks = 900
+solidify_into = "test:Stone"
+
+[temperature]
+heat_conductivity = 0.1
+ambient_temp = 0.0

@@ -36,7 +36,8 @@ private:
     // Material assignment pass
     static void AssignMaterials(Terrain& terrain, const std::vector<int>& surface,
                                 const std::vector<MaterialRule>& rules,
-                                const DefinitionRegistry& registry);
+                                const DefinitionRegistry& registry,
+                                int sea_level_y = -1);
 
     // Feature passes
     static void ApplyFeatures(Terrain& terrain, const std::vector<int>& surface,

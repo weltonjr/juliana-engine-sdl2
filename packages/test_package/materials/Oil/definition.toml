@@ -1,0 +1,27 @@
+[material]
+id = "Oil"
+name = "Oil"
+
+[physics]
+state = "liquid"
+density = 30
+friction = 0.1
+hardness = 0
+
+[visual]
+color = [60, 50, 20]
+color_variation = 5
+transparency = 0.2
+
+[behavior]
+gravity = true
+flammable = true
+blast_resistance = 5
+flow_rate = 4
+liquid_drag = 0.9
+
+[temperature]
+heat_conductivity = 0.1
+ambient_temp = 0.0
+ignition_temp = 150.0
+combustion_heat = 20.0

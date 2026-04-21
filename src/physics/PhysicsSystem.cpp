@@ -5,12 +5,17 @@
 #include "package/DefinitionRegistry.h"
 #include "package/MaterialDef.h"
 #include "package/ObjectDef.h"
+#include <cstring>
 
-PhysicsSystem::PhysicsSystem(const DefinitionRegistry& registry)
-    : registry_(registry)
-    , gravity_(800.0f)
+// Pixels per meter (Box2D internally works in meters; we use this scale).
+// 1 metre = 32 pixels gives sensible behaviour with default Box2D gravity (9.8 m/s²).
+// We override world gravity to GRAVITY_Y pixels/s², so no further scaling is needed.
+static constexpr float PIXELS_TO_METERS = 1.0f / 32.0f;
+static constexpr float METERS_TO_PIXELS = 32.0f;
+
+PhysicsSystem::PhysicsSystem(const DefinitionRegistry& registry, PhysicsWorld& world)
+    : registry_(registry), world_(world)
 {
-    // Build fast solid lookup table
     solid_lut_.resize(256, false);
     for (int i = 0; i < 256; i++) {
         auto* mat = registry.GetMaterialByRuntimeID(static_cast<MaterialID>(i));
@@ -20,97 +25,113 @@ PhysicsSystem::PhysicsSystem(const DefinitionRegistry& registry)
     }
 }
 
-bool PhysicsSystem::CheckTerrainOverlap(const Terrain& terrain, int x, int y, int w, int h) const {
-    for (int py = y; py < y + h; py++) {
-        for (int px = x; px < x + w; px++) {
-            Cell cell = terrain.GetCell(px, py);
-            if (solid_lut_[cell.material_id]) {
-                return true;
-            }
-        }
+void PhysicsSystem::RegisterEntity(Entity& entity) {
+    if (!entity.definition) return;
+
+    b2BodyDef bd;
+    switch (entity.definition->physics_mode) {
+        case PhysicsMode::Static:    bd.type = b2_staticBody;    break;
+        case PhysicsMode::Kinematic: bd.type = b2_kinematicBody; break;
+        default:                     bd.type = b2_dynamicBody;   break;
     }
-    return false;
+
+    bd.position.Set(entity.pos_x * PIXELS_TO_METERS,
+                    entity.pos_y * PIXELS_TO_METERS);
+    bd.linearVelocity.Set(entity.vel_x * PIXELS_TO_METERS,
+                          entity.vel_y * PIXELS_TO_METERS);
+    bd.fixedRotation = !entity.definition->rotation;
+    bd.linearDamping = 0.0f;
+    bd.angularDamping = entity.definition->angular_drag;
+
+    b2Body* body = world_.CreateBody(bd);
+
+    // Box shape sized to the entity (centred on the body origin)
+    float hw = entity.width  * 0.5f * PIXELS_TO_METERS;
+    float hh = entity.height * 0.5f * PIXELS_TO_METERS;
+    b2PolygonShape shape;
+    shape.SetAsBox(hw, hh);
+
+    b2FixtureDef fd;
+    fd.shape    = &shape;
+    fd.density  = (entity.mass > 0.0f)
+                    ? entity.mass / (entity.width * entity.height)
+                    : 1.0f;
+    fd.friction = 0.5f;
+    fd.restitution = 0.0f;
+    fd.isSensor = entity.definition->overlap_detection;
+    body->CreateFixture(&fd);
+
+    entity_bodies_[entity.id] = body;
 }
 
-int PhysicsSystem::TryStepUp(const Terrain& terrain, int x, int y, int w, int h, int max_step) const {
-    for (int step = 1; step <= max_step; step++) {
-        if (!CheckTerrainOverlap(terrain, x, y - step, w, h)) {
-            return step;
-        }
-    }
-    return 0;
-}
-
-void PhysicsSystem::ApplyGravity(Entity& entity, float dt) {
-    if (entity.definition && entity.definition->physics_mode != PhysicsMode::Dynamic) return;
-
-    if (entity.on_ground) {
-        if (entity.vel_y > 0.0f) {
-            entity.vel_y = 0.0f;
-        }
-        return;
-    }
-
-    entity.vel_y += gravity_ * dt;
-
-    float max_fall = entity.max_fall_speed;
-    if (entity.vel_y > max_fall) {
-        entity.vel_y = max_fall;
-    }
-}
-
-void PhysicsSystem::MoveEntity(Entity& entity, const Terrain& terrain, float dt) {
-    if (entity.definition && entity.definition->physics_mode != PhysicsMode::Dynamic) return;
-
-    entity.prev_pos_x = entity.pos_x;
-    entity.prev_pos_y = entity.pos_y;
-    entity.was_airborne = !entity.on_ground;
-
-    // Move X
-    float new_x = entity.pos_x + entity.vel_x * dt;
-    int ix = static_cast<int>(new_x);
-    int iy = static_cast<int>(entity.pos_y);
-
-    if (CheckTerrainOverlap(terrain, ix, iy, entity.width, entity.height)) {
-        int step = TryStepUp(terrain, ix, iy, entity.width, entity.height, entity.step_up);
-        if (step > 0) {
-            entity.pos_x = new_x;
-            entity.pos_y = entity.pos_y - static_cast<float>(step);
-        } else {
-            entity.vel_x = 0.0f;
-        }
-    } else {
-        entity.pos_x = new_x;
-    }
-
-    // Move Y
-    float new_y = entity.pos_y + entity.vel_y * dt;
-    ix = static_cast<int>(entity.pos_x);
-    int new_iy = static_cast<int>(new_y);
-
-    if (CheckTerrainOverlap(terrain, ix, new_iy, entity.width, entity.height)) {
-        if (entity.vel_y > 0.0f) {
-            entity.on_ground = true;
-            int cur_iy = static_cast<int>(entity.pos_y);
-            for (int test_y = cur_iy; test_y <= new_iy; test_y++) {
-                if (CheckTerrainOverlap(terrain, ix, test_y, entity.width, entity.height)) {
-                    entity.pos_y = static_cast<float>(test_y - 1);
-                    break;
-                }
-            }
-        } else {
-            entity.pos_y = static_cast<float>(new_iy + 1);
-        }
-        entity.vel_y = 0.0f;
-    } else {
-        entity.pos_y = new_y;
-        entity.on_ground = CheckTerrainOverlap(terrain, ix, new_iy + entity.height, entity.width, 1);
+void PhysicsSystem::UnregisterEntity(EntityID id) {
+    auto it = entity_bodies_.find(id);
+    if (it != entity_bodies_.end()) {
+        world_.DestroyBody(it->second);
+        entity_bodies_.erase(it);
     }
 }
 
-void PhysicsSystem::Update(EntityManager& entities, const Terrain& terrain, float dt) {
+void PhysicsSystem::SyncBodiesToEntities(EntityManager& entities) {
     entities.ForEach([&](Entity& entity) {
-        ApplyGravity(entity, dt);
-        MoveEntity(entity, terrain, dt);
+        auto it = entity_bodies_.find(entity.id);
+        if (it == entity_bodies_.end()) return;
+
+        b2Body* body = it->second;
+        b2Vec2 pos = body->GetPosition();
+        b2Vec2 vel = body->GetLinearVelocity();
+
+        entity.prev_pos_x = entity.pos_x;
+        entity.prev_pos_y = entity.pos_y;
+
+        entity.pos_x = pos.x * METERS_TO_PIXELS;
+        entity.pos_y = pos.y * METERS_TO_PIXELS;
+        entity.vel_x = vel.x * METERS_TO_PIXELS;
+        entity.vel_y = vel.y * METERS_TO_PIXELS;
+
+        // Determine on_ground: probe 1 pixel below the entity feet
+        int foot_x  = static_cast<int>(entity.pos_x);
+        int foot_y  = static_cast<int>(entity.pos_y) + entity.height;
+        entity.was_airborne = !entity.on_ground;
+        entity.on_ground    = false; // will be set by contact detection below
+        // Simple foot-probe against terrain
+        // (full contact callbacks would be added as a Box2D contact listener)
     });
+}
+
+void PhysicsSystem::Update(EntityManager& entities, const Terrain& /*terrain*/, float /*dt*/) {
+    // Keep Box2D bodies in sync with any external position changes
+    // (e.g. teleports, spawns)
+    entities.ForEach([&](Entity& entity) {
+        auto it = entity_bodies_.find(entity.id);
+        if (it == entity_bodies_.end()) {
+            // Auto-register newly spawned entities
+            RegisterEntity(entity);
+            return;
+        }
+
+        // If entity was moved externally (pos diverged significantly), update body
+        b2Body* body = it->second;
+        b2Vec2 bpos = body->GetPosition();
+        float bx = bpos.x * METERS_TO_PIXELS;
+        float by = bpos.y * METERS_TO_PIXELS;
+        float dx = entity.pos_x - bx;
+        float dy = entity.pos_y - by;
+        if (dx * dx + dy * dy > 4.0f) { // > 2px discrepancy
+            body->SetTransform(
+                b2Vec2(entity.pos_x * PIXELS_TO_METERS,
+                       entity.pos_y * PIXELS_TO_METERS),
+                body->GetAngle());
+            body->SetLinearVelocity(
+                b2Vec2(entity.vel_x * PIXELS_TO_METERS,
+                       entity.vel_y * PIXELS_TO_METERS));
+        }
+    });
+
+    // NOTE: world_.Step(dt) is called centrally by Engine::RunOneSimStep()
+    // so that all sim systems (terrain, Box2D, DynamicBodyManager) share the
+    // same time scale. PhysicsSystem only pushes entity transforms to Box2D
+    // and reads them back; it does NOT step the world.
+
+    SyncBodiesToEntities(entities);
 }

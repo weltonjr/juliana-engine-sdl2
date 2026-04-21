@@ -16,10 +16,12 @@ void Camera::SetPosition(float x, float y) {
 }
 
 void Camera::ClampToBounds(int terrain_width, int terrain_height) {
-    int view_w = GetViewWorldWidth();
-    int view_h = GetViewWorldHeight();
-    x_ = std::max(0.0f, std::min(x_, static_cast<float>(terrain_width - view_w)));
-    y_ = std::max(0.0f, std::min(y_, static_cast<float>(terrain_height - view_h)));
+    // Allow panning until at most half the viewport shows no terrain.
+    // This gives room for side panels/menus that may cover part of the screen.
+    float half_w = GetViewWorldWidth()  * 0.5f;
+    float half_h = GetViewWorldHeight() * 0.5f;
+    x_ = std::max(-half_w, std::min(x_, static_cast<float>(terrain_width)  - half_w));
+    y_ = std::max(-half_h, std::min(y_, static_cast<float>(terrain_height) - half_h));
 }
 
 SDL_Rect Camera::GetSourceRect(int terrain_width, int terrain_height) const {

@@ -1,9 +1,11 @@
 #include "terrain/TerrainRenderer.h"
+#include "terrain/TerrainSimulator.h"
 #include "render/Camera.h"
 #include "package/DefinitionRegistry.h"
 #include "package/MaterialDef.h"
 #include "package/BackgroundDef.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 // Fallback colors when no registry is available
@@ -117,6 +119,83 @@ TerrainRenderer::~TerrainRenderer() {
     }
 }
 
+// Compute an RGBA8888 pixel for the active overlay mode at world coordinate (wx,wy).
+// Returns 0x00000000 when no overlay should be drawn for this cell.
+uint32_t TerrainRenderer::OverlayPixel(int wx, int wy) const {
+    if (!simulator_ || overlay_ == Overlay::None || overlay_ == Overlay::Diagnostics)
+        return 0;
+
+    int idx = wy * width_ + wx;
+
+    auto pack = [](uint8_t r, uint8_t g, uint8_t b, uint8_t a) -> uint32_t {
+        return ((uint32_t)r << 24) | ((uint32_t)g << 16) | ((uint32_t)b << 8) | a;
+    };
+
+    switch (overlay_) {
+    case Overlay::Heatmap: {
+        const float* temp = simulator_->GetTempOverlay();
+        if (!temp) return 0;
+        float t = temp[idx];
+        // Clamp to visible range: [-50, 500]
+        float norm = (t + 50.0f) / 550.0f;
+        norm = std::max(0.0f, std::min(1.0f, norm));
+        // cool blue(0) → green(0.5) → red(1)
+        uint8_t r, g, b;
+        if (norm < 0.5f) {
+            float f = norm * 2.0f;
+            r = 0;
+            g = static_cast<uint8_t>(f * 255);
+            b = static_cast<uint8_t>((1.0f - f) * 255);
+        } else {
+            float f = (norm - 0.5f) * 2.0f;
+            r = static_cast<uint8_t>(f * 255);
+            g = static_cast<uint8_t>((1.0f - f) * 255);
+            b = 0;
+        }
+        return pack(r, g, b, 160);
+    }
+    case Overlay::Health: {
+        const int16_t* hp = simulator_->GetHealthOverlay();
+        if (!hp) return 0;
+        Cell cell = terrain_.GetCell(wx, wy);
+        if (registry_) {
+            auto* mat = registry_->GetMaterialByRuntimeID(cell.material_id);
+            if (!mat || mat->max_health <= 0) return 0;
+            float norm = static_cast<float>(hp[idx]) / static_cast<float>(mat->max_health);
+            norm = std::max(0.0f, std::min(1.0f, norm));
+            // white(1) → red(0.5) → black(0)
+            uint8_t r, g, b;
+            if (norm > 0.5f) {
+                float f = (norm - 0.5f) * 2.0f;
+                r = 255; g = static_cast<uint8_t>(f * 255); b = g;
+            } else {
+                float f = norm * 2.0f;
+                r = static_cast<uint8_t>(f * 255); g = 0; b = 0;
+            }
+            return pack(r, g, b, 160);
+        }
+        return 0;
+    }
+    case Overlay::Crack: {
+        uint8_t cr = simulator_->GetCrack(wx, wy, width_);
+        if (cr == 0) return 0;
+        uint8_t grey = static_cast<uint8_t>(40);
+        uint8_t a = static_cast<uint8_t>(std::min(255, static_cast<int>(cr)));
+        return pack(grey, grey, grey, a);
+    }
+    case Overlay::Stain: {
+        uint8_t sa = simulator_->GetStainA(idx);
+        if (sa == 0) return 0;
+        uint8_t sr = simulator_->GetStainR(idx);
+        uint8_t sg = simulator_->GetStainG(idx);
+        uint8_t sb = simulator_->GetStainB(idx);
+        return pack(sr, sg, sb, sa);
+    }
+    default:
+        return 0;
+    }
+}
+
 void TerrainRenderer::RebuildChunk(SDL_Renderer* /*renderer*/, int cx, int cy) {
     int idx = ChunkIndex(cx, cy);
     Chunk& chunk = chunks_[idx];
@@ -145,6 +224,43 @@ void TerrainRenderer::RebuildChunk(SDL_Renderer* /*renderer*/, int cx, int cy) {
                     pixel = bg_color_lut_[cell.background_id];
                 } else {
                     pixel = fg_color_lut_[cell.material_id];
+                }
+
+                // Apply stain overlay from simulator (always active — part of the base render)
+                if (simulator_ && overlay_ != Overlay::Stain) {
+                    int sidx = wy * width_ + wx;
+                    uint8_t sa = simulator_->GetStainA(sidx);
+                    if (sa > 0) {
+                        float a = sa / 255.0f;
+                        uint8_t sr = simulator_->GetStainR(sidx);
+                        uint8_t sg = simulator_->GetStainG(sidx);
+                        uint8_t sb = simulator_->GetStainB(sidx);
+                        uint8_t br = (pixel >> 24) & 0xFF;
+                        uint8_t bgg = (pixel >> 16) & 0xFF;
+                        uint8_t bb = (pixel >>  8) & 0xFF;
+                        br = static_cast<uint8_t>(br * (1.f - a) + sr * a);
+                        bgg = static_cast<uint8_t>(bgg * (1.f - a) + sg * a);
+                        bb = static_cast<uint8_t>(bb * (1.f - a) + sb * a);
+                        pixel = ((uint32_t)br << 24) | ((uint32_t)bgg << 16) |
+                                ((uint32_t)bb <<  8) | 0xFF;
+                    }
+                }
+
+                // Apply visualization overlay (heatmap, health, crack, stain isolation)
+                uint32_t ovl = OverlayPixel(wx, wy);
+                if (ovl != 0) {
+                    float oa = static_cast<float>(ovl & 0xFF) / 255.0f;
+                    uint8_t or_ = (ovl >> 24) & 0xFF;
+                    uint8_t og  = (ovl >> 16) & 0xFF;
+                    uint8_t ob  = (ovl >>  8) & 0xFF;
+                    uint8_t br = (pixel >> 24) & 0xFF;
+                    uint8_t bgg = (pixel >> 16) & 0xFF;
+                    uint8_t bb = (pixel >>  8) & 0xFF;
+                    br = static_cast<uint8_t>(br * (1.f - oa) + or_ * oa);
+                    bgg = static_cast<uint8_t>(bgg * (1.f - oa) + og * oa);
+                    bb = static_cast<uint8_t>(bb * (1.f - oa) + ob * oa);
+                    pixel = ((uint32_t)br << 24) | ((uint32_t)bgg << 16) |
+                            ((uint32_t)bb <<  8) | 0xFF;
                 }
             } else {
                 pixel = 0x000000FF;  // black for out-of-bounds

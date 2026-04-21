@@ -24,7 +24,17 @@ FetchContent_Declare(sol2
     GIT_TAG v3.3.0
 )
 
-FetchContent_MakeAvailable(tomlplusplus json sol2)
+# Box2D 2.4.1 — rigid body physics for entities and dynamic terrain fragments
+FetchContent_Declare(box2d
+    GIT_REPOSITORY https://github.com/erincatto/box2d.git
+    GIT_TAG v2.4.1
+)
+
+# Disable Box2D tests and benchmarks to avoid assembly issues in doctest.h
+set(BOX2D_BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(BOX2D_BUILD_TESTBED    OFF CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(tomlplusplus json sol2 box2d)
 
 # ─── Patch sol2 v3.3.0 ────────────────────────────────────────────────────────
 # optional<T&>::emplace incorrectly calls this->construct() which only exists
@@ -98,6 +108,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     tomlplusplus::tomlplusplus
     nlohmann_json::nlohmann_json
     ${LUA_LIBRARIES}
+    box2d
 )
 
 if(EMSCRIPTEN)

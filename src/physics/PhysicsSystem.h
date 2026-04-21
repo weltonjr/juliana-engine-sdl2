@@ -1,7 +1,10 @@
 #pragma once
 
+#include "physics/PhysicsWorld.h"
 #include "package/MaterialDef.h"
+#include "core/Types.h"
 #include <vector>
+#include <unordered_map>
 
 class EntityManager;
 class Terrain;
@@ -10,19 +13,27 @@ struct Entity;
 
 class PhysicsSystem {
 public:
-    PhysicsSystem(const DefinitionRegistry& registry);
+    PhysicsSystem(const DefinitionRegistry& registry, PhysicsWorld& world);
 
     void Update(EntityManager& entities, const Terrain& terrain, float dt);
 
+    // Register a newly spawned entity into Box2D. Call once after entity creation.
+    void RegisterEntity(Entity& entity);
+
+    // Remove an entity from Box2D. Call before entity destruction.
+    void UnregisterEntity(EntityID id);
+
+    PhysicsWorld& GetWorld() { return world_; }
+
 private:
-    void ApplyGravity(Entity& entity, float dt);
-    void MoveEntity(Entity& entity, const Terrain& terrain, float dt);
-    bool CheckTerrainOverlap(const Terrain& terrain, int x, int y, int w, int h) const;
-    int TryStepUp(const Terrain& terrain, int x, int y, int w, int h, int max_step) const;
+    void SyncBodiesToEntities(EntityManager& entities);
 
     const DefinitionRegistry& registry_;
-    float gravity_ = 800.0f;
+    PhysicsWorld&             world_;
 
-    // Fast collision lookup: true if material blocks movement
+    // Map entity id → Box2D body
+    std::unordered_map<EntityID, b2Body*> entity_bodies_;
+
+    // Fast terrain-solid lookup (indexed by MaterialID)
     std::vector<bool> solid_lut_;
 };

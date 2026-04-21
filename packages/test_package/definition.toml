@@ -1,0 +1,5 @@
+[package]
+id = "test"
+name = "Test Package"
+version = "0.1.0"
+description = "Editor test definitions"

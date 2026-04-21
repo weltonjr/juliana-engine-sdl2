@@ -1,0 +1,27 @@
+[material]
+id = "Ice"
+name = "Ice"
+
+[physics]
+state = "solid"
+density = 100
+friction = 0.1
+hardness = 20
+
+[visual]
+color = [180, 220, 240]
+transparency = 0.3
+color_variation = 5
+
+[behavior]
+gravity = false
+blast_resistance = 15
+
+[temperature]
+heat_conductivity = 0.3
+ambient_temp = -5.0
+
+[[phase_change]]
+temp = 0.0
+above = true
+into = "test:Water"

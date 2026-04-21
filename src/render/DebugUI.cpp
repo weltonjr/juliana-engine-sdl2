@@ -66,6 +66,7 @@ void DebugUI::Update(int mouse_x, int mouse_y, const Camera& camera,
                 case MaterialState::Solid:  material_state_ = "solid"; break;
                 case MaterialState::Powder: material_state_ = "powder"; break;
                 case MaterialState::Liquid: material_state_ = "liquid"; break;
+                case MaterialState::Gas:    material_state_ = "gas"; break;
             }
         } else {
             material_name_ = "Unknown";

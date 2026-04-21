@@ -5,6 +5,7 @@
 // Forward declarations — keeps sol2 headers isolated to LuaState.cpp
 class Engine;
 class UISystem;
+class TerrainSimulator;
 
 // Owns the sol2/Lua state and exposes the engine API to scripts.
 // All sol2 types are hidden behind the Impl pimpl to avoid polluting compile times.
@@ -21,6 +22,10 @@ public:
     // Execute a Lua file in a sandboxed environment (mod/aspect scripts).
     // Removes: engine.fs, engine.json, io, os, dofile, loadfile, require.
     bool RunSandboxedScript(const std::string& path, const std::string& base_path = "");
+
+    // Load material behavior scripts from the registry and register on_tick callbacks
+    // into the simulator. Call after all packages are loaded and LUTs are built.
+    void LoadMaterialScripts(TerrainSimulator& sim);
 
 private:
     struct Impl;

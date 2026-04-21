@@ -1,0 +1,29 @@
+[material]
+id = "Stone"
+name = "Stone"
+
+[physics]
+state = "solid"
+density = 200
+friction = 0.8
+hardness = 60
+
+[visual]
+color = [120, 115, 110]
+color_variation = 15
+
+[behavior]
+gravity = false
+blast_resistance = 80
+
+[temperature]
+heat_conductivity = 0.08
+ambient_temp = 0.0
+
+[health]
+max_health = 300
+
+[fragmentation]
+style = "random"
+min_pixels = 8
+max_pixels = 48
