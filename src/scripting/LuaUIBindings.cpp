@@ -48,20 +48,24 @@ int ToInt(double v) { return static_cast<int>(v); }
 void RegisterLuaUIBindings(sol::state& lua, UISystem& ui, Engine& engine) {
     // ── UIElement ─────────────────────────────────────────────────────────────
     // Direct field bindings replace the 12 hand-written lambda-property pairs.
+    // sol2 v3.3.0 + AppleClang 16: taking the address of the templated
+    // upvalue_this_member_variable::call fails with "address of overloaded
+    // function" when binding member-variable pointers directly. Use
+    // sol::property lambdas to avoid that code path entirely.
     lua.new_usertype<UIElement>("UIElement",
         sol::no_constructor,
-        "id",         &UIElement::id,
-        "visible",    &UIElement::visible,
-        "x",          &UIElement::x,
-        "y",          &UIElement::y,
-        "w",          &UIElement::w,
-        "h",          &UIElement::h,
-        "text",       &UIElement::text,
-        "text_left",  &UIElement::text_left,
-        "disabled",   &UIElement::disabled,
-        "value",      &UIElement::value,
-        "focused",    &UIElement::focused,
-        "max_length", &UIElement::max_length,
+        "id",         sol::property([](UIElement& e) { return e.id; },         [](UIElement& e, std::string v)  { e.id         = std::move(v); }),
+        "visible",    sol::property([](UIElement& e) { return e.visible; },    [](UIElement& e, bool v)         { e.visible    = v; }),
+        "x",          sol::property([](UIElement& e) { return e.x; },          [](UIElement& e, int v)          { e.x          = v; }),
+        "y",          sol::property([](UIElement& e) { return e.y; },          [](UIElement& e, int v)          { e.y          = v; }),
+        "w",          sol::property([](UIElement& e) { return e.w; },          [](UIElement& e, int v)          { e.w          = v; }),
+        "h",          sol::property([](UIElement& e) { return e.h; },          [](UIElement& e, int v)          { e.h          = v; }),
+        "text",       sol::property([](UIElement& e) { return e.text; },       [](UIElement& e, std::string v)  { e.text       = std::move(v); }),
+        "text_left",  sol::property([](UIElement& e) { return e.text_left; },  [](UIElement& e, bool v)         { e.text_left  = v; }),
+        "disabled",   sol::property([](UIElement& e) { return e.disabled; },   [](UIElement& e, bool v)         { e.disabled   = v; }),
+        "value",      sol::property([](UIElement& e) { return e.value; },      [](UIElement& e, std::string v)  { e.value      = std::move(v); }),
+        "focused",    sol::property([](UIElement& e) { return e.focused; },    [](UIElement& e, bool v)         { e.focused    = v; }),
+        "max_length", sol::property([](UIElement& e) { return e.max_length; }, [](UIElement& e, int v)          { e.max_length = v; }),
 
         // Writable properties for callbacks — scripts write `btn.on_click = fn`
         // for consistency with the other field assignments.
@@ -98,7 +102,7 @@ void RegisterLuaUIBindings(sol::state& lua, UISystem& ui, Engine& engine) {
     // surface stays the same (screen:add_button, screen:add_frame, etc).
     lua.new_usertype<UIScreen>("UIScreen",
         sol::no_constructor,
-        "name",       &UIScreen::name,
+        "name",       sol::property([](UIScreen& s) { return s.name; }, [](UIScreen& s, std::string v) { s.name = std::move(v); }),
         "add_frame",  [](UIScreen& s, double x, double y, double w, double h) {
             return s.AddFrame(ToInt(x), ToInt(y), ToInt(w), ToInt(h));
         },
