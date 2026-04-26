@@ -27,7 +27,8 @@
       "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && cat {}')",
       "Bash(cmake -S /Users/mainuser/source/juliana-engine-sdl2 -B /Users/mainuser/source/juliana-engine-sdl2/build)",
       "Bash(cmake --build /Users/mainuser/source/juliana-engine-sdl2/build)",
-      "Bash(cmake --build build -j)"
+      "Bash(cmake --build build -j)",
+      "Bash(python3 *)"
     ]
   }
 }
