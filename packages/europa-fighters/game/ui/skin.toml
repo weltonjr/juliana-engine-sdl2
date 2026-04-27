@@ -1,0 +1,14 @@
+[colors]
+frame_bg       = [5,   12,  32,  242]
+frame_border   = [35,  75,  140, 255]
+
+button_normal  = [12,  30,  75,  255]
+button_hover   = [20,  50,  115, 255]
+button_pressed = [6,   18,  48,  255]
+button_border  = [45,  95,  175, 255]
+button_text    = [155, 210, 245, 255]
+
+label_text     = [120, 175, 220, 255]
+input_bg       = [8,   20,  55,  255]
+input_border   = [40,  85,  160, 255]
+input_text     = [180, 220, 250, 255]

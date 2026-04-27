@@ -1,0 +1,24 @@
+[object]
+id                 = "PlasmaShot"
+name               = "Plasma Shot"
+category           = ["Projectile"]
+player_controllable = false
+
+[physics]
+mode              = "dynamic"
+mass              = 1
+max_fall_speed    = 2000.0
+size              = [4, 4]
+rotation          = false
+solid             = false
+overlap_detection = true
+step_up           = 0
+
+[visual]
+color = [80, 220, 255]
+
+[properties]
+damage         = 25.0
+speed          = 620.0
+lifetime_ticks = 120.0
+owner_id       = 0.0

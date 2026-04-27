@@ -1,0 +1,21 @@
+[game]
+id      = "europa-fighters"
+name    = "Europa Fighters"
+version = "0.1.0"
+
+[window]
+width  = 1280
+height = 720
+
+[ui]
+skin      = "ui/skin.toml"
+font      = "ui/Hack-Regular.ttf"
+font_size = 14
+
+[startup]
+script = "scripts/main.lua"
+
+[packages]
+load = [
+    "packages/europa-fighters/base"
+]

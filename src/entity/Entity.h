@@ -3,6 +3,7 @@
 #include "core/Types.h"
 #include "package/ObjectDef.h"
 #include <string>
+#include <unordered_map>
 
 struct Entity {
     EntityID id = 0;
@@ -25,6 +26,10 @@ struct Entity {
     bool on_ground = false;
     bool was_airborne = false;
 
+    // Rotation state (synced from Box2D when definition->rotation == true)
+    float angle_rad = 0.0f;
+    float angular_velocity = 0.0f;
+
     // Action state
     std::string current_action = "Idle";
     int action_frame = 0;
@@ -41,6 +46,10 @@ struct Entity {
 
     // Owner player slot (0 = unowned)
     uint32_t owner_slot = 0;
+
+    // Per-instance mutable properties (seeded from ObjectDef::properties at spawn).
+    // Use these for runtime values like HP that vary per entity.
+    std::unordered_map<std::string, float> instance_properties;
 
     // Alive flag
     bool alive = true;

@@ -1,0 +1,36 @@
+{
+    "scenario": {
+        "id": "EuropaTunnels",
+        "name": "Europa Tunnels",
+        "description": "Ice tunnels beneath Europa's frozen crust. Deathmatch arena.",
+        "packages": ["europa"]
+    },
+
+    "map": {
+        "width": 1280,
+        "height": 720,
+        "seed": 0,
+
+        "shape": "flat",
+        "shape_params": {
+            "surface_level": 0.01,
+            "roughness": 0.0
+        },
+
+        "materials": [
+            { "id": "base:Air",           "rule": "above_surface" },
+            { "id": "europa:IceRock",     "rule": "deep",    "min_depth": 80, "background": "europa:DeepIce" },
+            { "id": "europa:FrozenCrust", "rule": "fill",    "background": "europa:IceWall" }
+        ],
+
+        "features": [
+            { "type": "caves", "density": 0.20, "min_size": 24, "max_size": 60,  "zone": "all" },
+            { "type": "caves", "density": 0.07, "min_size": 55, "max_size": 110, "zone": "all" },
+            { "type": "ore_veins", "material": "europa:IceSlush", "density": 0.012, "vein_radius": 10, "zone": "all" }
+        ]
+    },
+
+    "players": {
+        "slots": []
+    }
+}

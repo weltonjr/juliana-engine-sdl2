@@ -1,0 +1,5 @@
+[package]
+id          = "europa"
+name        = "Europa Fighters Base"
+version     = "0.1.0"
+description = "Ice tunnels, ships, and weapons for Europa Fighters deathmatch"

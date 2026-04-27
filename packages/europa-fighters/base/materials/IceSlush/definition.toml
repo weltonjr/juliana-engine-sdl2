@@ -1,0 +1,23 @@
+[material]
+id   = "IceSlush"
+name = "Ice Slush"
+
+[physics]
+state    = "liquid"
+density  = 55
+friction = 0.3
+hardness = 0
+
+[visual]
+color           = [150, 195, 225]
+color_variation = 10
+transparency    = 0.5
+
+[behavior]
+gravity     = true
+flow_rate   = 1
+liquid_drag = 0.88
+
+[temperature]
+heat_conductivity = 0.4
+ambient_temp      = -80.0

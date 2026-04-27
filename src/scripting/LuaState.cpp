@@ -450,6 +450,180 @@ void LuaState::BindAPI() {
                 }
             });
     };
+    phys_tbl["set_gravity"] = [&engine](float gx, float gy) {
+        engine.SetWorldGravity(gx, gy);
+    };
+
+    // ── engine.entity table ───────────────────────────────────────────────────
+    // Generic entity control API for Lua-driven game packages.
+    // All functions are null-safe: they no-op when the entity manager is not initialized.
+    auto ent_tbl = eng.create("entity");
+
+    // Bootstrap the entity + physics systems. Must be called once before spawning.
+    ent_tbl["init"] = [&engine]() { engine.InitGameEntities(); };
+
+    ent_tbl["spawn"] = [&engine](const std::string& def_id, float x, float y) -> int {
+        auto* em = engine.GetEntityManager();
+        if (!em) { std::fprintf(stderr, "[entity.spawn] call engine.entity.init() first\n"); return 0; }
+        return static_cast<int>(em->Spawn(def_id, x, y));
+    };
+
+    ent_tbl["destroy"] = [&engine](int id) {
+        auto* em = engine.GetEntityManager();
+        if (em) em->QueueDestroy(static_cast<EntityID>(id));
+    };
+
+    ent_tbl["is_valid"] = [&engine](int id) -> bool {
+        auto* em = engine.GetEntityManager();
+        return em && em->GetEntity(static_cast<EntityID>(id)) != nullptr;
+    };
+
+    ent_tbl["get_def_id"] = [&engine](int id) -> std::string {
+        auto* em = engine.GetEntityManager();
+        if (!em) return "";
+        auto* e = em->GetEntity(static_cast<EntityID>(id));
+        return (e && e->definition) ? e->definition->qualified_id : "";
+    };
+
+    ent_tbl["get_position"] = [&engine](int id) -> std::tuple<float, float> {
+        auto* em = engine.GetEntityManager();
+        if (!em) return {0.f, 0.f};
+        auto* e = em->GetEntity(static_cast<EntityID>(id));
+        return e ? std::make_tuple(e->pos_x, e->pos_y) : std::make_tuple(0.f, 0.f);
+    };
+
+    ent_tbl["set_position"] = [&engine](int id, float x, float y) {
+        auto* em = engine.GetEntityManager();
+        if (!em) return;
+        auto* e = em->GetEntity(static_cast<EntityID>(id));
+        if (!e) return;
+        e->pos_x = x; e->pos_y = y;
+        e->prev_pos_x = x; e->prev_pos_y = y;
+        auto* ps = engine.GetPhysicsSystem();
+        if (ps) ps->SetPosition(static_cast<EntityID>(id), x, y);
+    };
+
+    ent_tbl["get_velocity"] = [&engine](int id) -> std::tuple<float, float> {
+        auto* em = engine.GetEntityManager();
+        if (!em) return {0.f, 0.f};
+        auto* e = em->GetEntity(static_cast<EntityID>(id));
+        return e ? std::make_tuple(e->vel_x, e->vel_y) : std::make_tuple(0.f, 0.f);
+    };
+
+    ent_tbl["set_velocity"] = [&engine](int id, float vx, float vy) {
+        auto* ps = engine.GetPhysicsSystem();
+        if (ps) ps->SetVelocity(static_cast<EntityID>(id), vx, vy);
+        auto* em = engine.GetEntityManager();
+        if (em) {
+            auto* e = em->GetEntity(static_cast<EntityID>(id));
+            if (e) { e->vel_x = vx; e->vel_y = vy; }
+        }
+    };
+
+    ent_tbl["apply_impulse"] = [&engine](int id, float ix, float iy) {
+        auto* ps = engine.GetPhysicsSystem();
+        if (ps) ps->ApplyImpulse(static_cast<EntityID>(id), ix, iy);
+    };
+
+    ent_tbl["apply_force"] = [&engine](int id, float fx, float fy) {
+        auto* ps = engine.GetPhysicsSystem();
+        if (ps) ps->ApplyForce(static_cast<EntityID>(id), fx, fy);
+    };
+
+    ent_tbl["apply_torque"] = [&engine](int id, float torque) {
+        auto* ps = engine.GetPhysicsSystem();
+        if (ps) ps->ApplyTorque(static_cast<EntityID>(id), torque);
+    };
+
+    ent_tbl["set_angular_velocity"] = [&engine](int id, float rad_s) {
+        auto* ps = engine.GetPhysicsSystem();
+        if (ps) ps->SetAngularVelocity(static_cast<EntityID>(id), rad_s);
+        auto* em = engine.GetEntityManager();
+        if (em) {
+            auto* e = em->GetEntity(static_cast<EntityID>(id));
+            if (e) e->angular_velocity = rad_s;
+        }
+    };
+
+    ent_tbl["get_angle"] = [&engine](int id) -> float {
+        auto* em = engine.GetEntityManager();
+        if (!em) return 0.f;
+        auto* e = em->GetEntity(static_cast<EntityID>(id));
+        return e ? e->angle_rad : 0.f;
+    };
+
+    ent_tbl["get_property"] = [&engine](int id, const std::string& key) -> float {
+        auto* em = engine.GetEntityManager();
+        if (!em) return 0.f;
+        auto* e = em->GetEntity(static_cast<EntityID>(id));
+        if (!e) return 0.f;
+        // Check per-instance properties first, then fall back to definition defaults.
+        auto it = e->instance_properties.find(key);
+        if (it != e->instance_properties.end()) return it->second;
+        if (e->definition) {
+            auto dit = e->definition->properties.find(key);
+            if (dit != e->definition->properties.end()) return dit->second;
+        }
+        return 0.f;
+    };
+
+    ent_tbl["set_property"] = [&engine](int id, const std::string& key, float value) {
+        auto* em = engine.GetEntityManager();
+        if (!em) return;
+        auto* e = em->GetEntity(static_cast<EntityID>(id));
+        if (e) e->instance_properties[key] = value;
+    };
+
+    // deal_damage: decrements "hp" instance property and destroys entity when it reaches 0.
+    // Fires the on_death callback if registered.
+    ent_tbl["deal_damage"] = [&engine](int id, float amount) {
+        auto* em = engine.GetEntityManager();
+        if (!em) return;
+        auto* e = em->GetEntity(static_cast<EntityID>(id));
+        if (!e) return;
+        auto it = e->instance_properties.find("hp");
+        if (it == e->instance_properties.end()) return;
+        it->second -= amount;
+        if (it->second <= 0.f) {
+            it->second = 0.f;
+            em->QueueDestroy(static_cast<EntityID>(id));
+            if (engine.GetEntityDeathCallback())
+                engine.GetEntityDeathCallback()(static_cast<EntityID>(id));
+        }
+    };
+
+    ent_tbl["find_entities"] = [&lua, &engine](float x, float y, float radius) -> sol::table {
+        sol::table out = lua.create_table();
+        auto* em = engine.GetEntityManager();
+        if (!em) return out;
+        int idx = 1;
+        float r2 = radius * radius;
+        em->ForEach([&](const Entity& e) {
+            float dx = e.pos_x - x, dy = e.pos_y - y;
+            if (dx * dx + dy * dy <= r2)
+                out[idx++] = static_cast<int>(e.id);
+        });
+        return out;
+    };
+
+    ent_tbl["get_all"] = [&lua, &engine]() -> sol::table {
+        sol::table out = lua.create_table();
+        auto* em = engine.GetEntityManager();
+        if (!em) return out;
+        int idx = 1;
+        em->ForEach([&](const Entity& e) { out[idx++] = static_cast<int>(e.id); });
+        return out;
+    };
+
+    ent_tbl["on_death"] = [&engine](sol::function fn) {
+        engine.SetEntityDeathCallback([fn](EntityID eid) mutable {
+            auto res = fn(static_cast<int>(eid));
+            if (!res.valid()) {
+                sol::error err = res;
+                std::fprintf(stderr, "[on_death error] %s\n", err.what());
+            }
+        });
+    };
 
     // ── engine.input table ────────────────────────────────────────────────────
     auto inp_tbl = eng.create("input");
@@ -492,6 +666,14 @@ void LuaState::BindAPI() {
     key_tbl["LCTRL"]     = static_cast<int>(SDL_SCANCODE_LCTRL);
     key_tbl["RCTRL"]     = static_cast<int>(SDL_SCANCODE_RCTRL);
     key_tbl["GRAVE"]     = static_cast<int>(SDL_SCANCODE_GRAVE);
+    key_tbl["SPACE"]     = static_cast<int>(SDL_SCANCODE_SPACE);
+    key_tbl["Q"]         = static_cast<int>(SDL_SCANCODE_Q);
+    key_tbl["E"]         = static_cast<int>(SDL_SCANCODE_E);
+    key_tbl["F"]         = static_cast<int>(SDL_SCANCODE_F);
+    key_tbl["R"]         = static_cast<int>(SDL_SCANCODE_R);
+    key_tbl["I"]         = static_cast<int>(SDL_SCANCODE_I);
+    key_tbl["TAB"]       = static_cast<int>(SDL_SCANCODE_TAB);
+    key_tbl["LSHIFT"]    = static_cast<int>(SDL_SCANCODE_LSHIFT);
 
     // ── engine.fs table ───────────────────────────────────────────────────────
     auto fs_tbl = eng.create("fs");

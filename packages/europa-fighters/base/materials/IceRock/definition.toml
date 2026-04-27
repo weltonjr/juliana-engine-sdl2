@@ -1,0 +1,22 @@
+[material]
+id   = "IceRock"
+name = "Ice Rock"
+
+[physics]
+state    = "solid"
+density  = 180
+friction = 0.15
+hardness = 70
+
+[visual]
+color            = [130, 185, 215]
+color_variation  = 14
+transparency     = 0.15
+
+[behavior]
+gravity          = false
+blast_resistance = 50
+
+[temperature]
+heat_conductivity = 0.25
+ambient_temp      = -120.0

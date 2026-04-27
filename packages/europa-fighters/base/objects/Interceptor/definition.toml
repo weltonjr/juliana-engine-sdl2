@@ -1,0 +1,28 @@
+[object]
+id                 = "Interceptor"
+name               = "Interceptor"
+category           = ["Ship"]
+player_controllable = false
+
+[physics]
+mode              = "dynamic"
+mass              = 80
+max_fall_speed    = 1200.0
+size              = [18, 10]
+rotation          = true
+angular_drag      = 0.82
+solid             = true
+overlap_detection = true
+step_up           = 0
+
+[visual]
+color = [60, 200, 220]
+
+[properties]
+hp              = 100.0
+thrust_forward  = 4000.0
+thrust_lateral  = 2000.0
+angular_thrust  = 1400.0
+max_speed       = 420.0
+fire_rate_ticks = 6.0
+weapon_type     = 1.0

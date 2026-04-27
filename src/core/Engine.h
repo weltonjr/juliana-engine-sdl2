@@ -175,6 +175,25 @@ public:
         return physics_collision_cb_;
     }
 
+    // ── Lua-driven game mode ─────────────────────────────────────────────────────
+    // Boot the entity + physics systems without loading a full scenario file.
+    // Call from Lua (engine.entity.init()) before spawning any entities.
+    // Sets sim_running_ = true so entities are updated and rendered each tick.
+    void InitGameEntities();
+
+    // Set Box2D world gravity in pixels/s² (positive Y = downward).
+    // Default is 980 px/s² (Earth). Europa = 130 px/s².
+    void SetWorldGravity(float gx, float gy);
+
+    // Direct accessors for Lua entity bindings.
+    EntityManager* GetEntityManager() const { return entity_manager_.get(); }
+    PhysicsSystem* GetPhysicsSystem() const { return physics_.get(); }
+
+    // Callback fired by engine.entity.deal_damage() when an entity's HP reaches zero.
+    using EntityDeathCallback = std::function<void(EntityID)>;
+    void SetEntityDeathCallback(EntityDeathCallback cb) { entity_death_cb_ = std::move(cb); }
+    const EntityDeathCallback& GetEntityDeathCallback() const { return entity_death_cb_; }
+
 private:
     // --- Editor overlay ---
     void DrawWorldMarkers(const std::vector<WorldMarker>& markers);
@@ -235,6 +254,9 @@ private:
     // Cached collision relay callback (forwarded from PhysicsWorld contact listener).
     PhysicsCollisionCallback physics_collision_cb_;
     void InstallCollisionRelay();
+
+    // Entity death callback (set by Lua via engine.entity.on_death).
+    EntityDeathCallback entity_death_cb_;
 
     // One-shot sim tick helper used by StepSim + normal accumulator path.
     void RunOneSimStep(float dt);
