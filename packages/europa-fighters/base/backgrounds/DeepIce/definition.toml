@@ -1,0 +1,7 @@
+[background]
+id   = "DeepIce"
+name = "Deep Ice"
+
+[visual]
+color           = [45, 75, 110]
+color_variation = 8

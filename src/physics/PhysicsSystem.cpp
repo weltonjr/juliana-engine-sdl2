@@ -89,6 +89,12 @@ void PhysicsSystem::SyncBodiesToEntities(EntityManager& entities) {
         entity.vel_x = vel.x * METERS_TO_PIXELS;
         entity.vel_y = vel.y * METERS_TO_PIXELS;
 
+        // Sync rotation if the definition allows it
+        if (entity.definition && entity.definition->rotation) {
+            entity.angle_rad        = body->GetAngle();
+            entity.angular_velocity = body->GetAngularVelocity();
+        }
+
         // Determine on_ground: probe 1 pixel below the entity feet
         int foot_x  = static_cast<int>(entity.pos_x);
         int foot_y  = static_cast<int>(entity.pos_y) + entity.height;
@@ -97,6 +103,53 @@ void PhysicsSystem::SyncBodiesToEntities(EntityManager& entities) {
         // Simple foot-probe against terrain
         // (full contact callbacks would be added as a Box2D contact listener)
     });
+}
+
+void PhysicsSystem::ApplyImpulse(EntityID id, float ix, float iy) {
+    auto it = entity_bodies_.find(id);
+    if (it == entity_bodies_.end()) return;
+    it->second->ApplyLinearImpulseToCenter(
+        b2Vec2(ix * PIXELS_TO_METERS, iy * PIXELS_TO_METERS), true);
+}
+
+void PhysicsSystem::ApplyForce(EntityID id, float fx, float fy) {
+    auto it = entity_bodies_.find(id);
+    if (it == entity_bodies_.end()) return;
+    it->second->ApplyForceToCenter(
+        b2Vec2(fx * PIXELS_TO_METERS, fy * PIXELS_TO_METERS), true);
+}
+
+void PhysicsSystem::ApplyTorque(EntityID id, float torque) {
+    auto it = entity_bodies_.find(id);
+    if (it == entity_bodies_.end()) return;
+    // Torque scales as P2M^2 to stay in SI units for Box2D
+    it->second->ApplyTorque(torque * PIXELS_TO_METERS * PIXELS_TO_METERS, true);
+}
+
+void PhysicsSystem::SetAngularVelocity(EntityID id, float rad_s) {
+    auto it = entity_bodies_.find(id);
+    if (it == entity_bodies_.end()) return;
+    it->second->SetAngularVelocity(rad_s);
+}
+
+void PhysicsSystem::SetVelocity(EntityID id, float vx, float vy) {
+    auto it = entity_bodies_.find(id);
+    if (it == entity_bodies_.end()) return;
+    it->second->SetLinearVelocity(
+        b2Vec2(vx * PIXELS_TO_METERS, vy * PIXELS_TO_METERS));
+}
+
+void PhysicsSystem::SetPosition(EntityID id, float x, float y) {
+    auto it = entity_bodies_.find(id);
+    if (it == entity_bodies_.end()) return;
+    it->second->SetTransform(
+        b2Vec2(x * PIXELS_TO_METERS, y * PIXELS_TO_METERS),
+        it->second->GetAngle());
+}
+
+float PhysicsSystem::GetAngle(EntityID id) const {
+    auto it = entity_bodies_.find(id);
+    return (it != entity_bodies_.end()) ? it->second->GetAngle() : 0.0f;
 }
 
 void PhysicsSystem::Update(EntityManager& entities, const Terrain& /*terrain*/, float /*dt*/) {

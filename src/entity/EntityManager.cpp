@@ -29,6 +29,11 @@ EntityID EntityManager::Spawn(const std::string& def_id, float x, float y) {
     entity.step_up = def->step_up;
     entity.solid = def->solid;
 
+    // Seed per-instance properties from the definition defaults.
+    // Scripts can then mutate these (e.g. decrement HP) without affecting other instances.
+    for (const auto& [k, v] : def->properties)
+        entity.instance_properties[k] = v;
+
     entities_[id] = entity;
     RebuildSortedIDs();
 

@@ -1,0 +1,7 @@
+[background]
+id   = "IceWall"
+name = "Ice Wall"
+
+[visual]
+color           = [80, 120, 155]
+color_variation = 12

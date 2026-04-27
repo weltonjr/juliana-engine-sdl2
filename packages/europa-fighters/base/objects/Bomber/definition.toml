@@ -1,0 +1,28 @@
+[object]
+id                 = "Bomber"
+name               = "Bomber"
+category           = ["Ship"]
+player_controllable = false
+
+[physics]
+mode              = "dynamic"
+mass              = 220
+max_fall_speed    = 800.0
+size              = [28, 16]
+rotation          = true
+angular_drag      = 0.78
+solid             = true
+overlap_detection = true
+step_up           = 0
+
+[visual]
+color = [190, 140, 50]
+
+[properties]
+hp              = 250.0
+thrust_forward  = 6000.0
+thrust_lateral  = 2800.0
+angular_thrust  = 700.0
+max_speed       = 240.0
+fire_rate_ticks = 55.0
+weapon_type     = 2.0

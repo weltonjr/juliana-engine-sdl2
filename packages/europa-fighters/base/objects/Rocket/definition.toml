@@ -1,0 +1,27 @@
+[object]
+id                 = "Rocket"
+name               = "Rocket"
+category           = ["Projectile"]
+player_controllable = false
+
+[physics]
+mode              = "dynamic"
+mass              = 5
+max_fall_speed    = 2000.0
+size              = [8, 4]
+rotation          = true
+angular_drag      = 0.99
+solid             = false
+overlap_detection = true
+step_up           = 0
+
+[visual]
+color = [255, 170, 40]
+
+[properties]
+damage             = 85.0
+speed              = 390.0
+lifetime_ticks     = 200.0
+owner_id           = 0.0
+explosion_radius   = 36.0
+explosion_strength = 14.0

@@ -1,0 +1,28 @@
+[object]
+id                 = "Scout"
+name               = "Scout"
+category           = ["Ship"]
+player_controllable = false
+
+[physics]
+mode              = "dynamic"
+mass              = 50
+max_fall_speed    = 1400.0
+size              = [12, 7]
+rotation          = true
+angular_drag      = 0.86
+solid             = true
+overlap_detection = true
+step_up           = 0
+
+[visual]
+color = [140, 225, 120]
+
+[properties]
+hp              = 150.0
+thrust_forward  = 3200.0
+thrust_lateral  = 2800.0
+angular_thrust  = 2200.0
+max_speed       = 380.0
+fire_rate_ticks = 8.0
+weapon_type     = 3.0

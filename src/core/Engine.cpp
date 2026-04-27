@@ -206,6 +206,38 @@ void Engine::GenerateTerrain(const ScenarioDef& scenario) {
     EngineLog::Log(buf);
 }
 
+// ─── InitGameEntities ─────────────────────────────────────────────────────────
+// Bootstraps the entity + physics layer for Lua-driven games (e.g. Europa Fighters).
+// Call from Lua before spawning any entities. Terrain may be generated before or
+// after this call — both orderings are safe because world_ is created lazily.
+
+void Engine::InitGameEntities() {
+    entity_manager_ = std::make_unique<EntityManager>(registry_);
+    if (!world_) world_ = std::make_unique<PhysicsWorld>();
+    physics_ = std::make_unique<PhysicsSystem>(registry_, *world_);
+    InstallCollisionRelay();
+
+    // Load action maps for all objects with animation definitions.
+    for (auto& [qid, obj_ptr] : registry_.GetAllObjects()) {
+        if (!obj_ptr->animations_path.empty()) {
+            ActionMap am;
+            if (am.LoadFromFile(obj_ptr->animations_path))
+                action_maps_[qid] = std::move(am);
+        }
+    }
+
+    // Activate simulation path so entities are updated and rendered each tick.
+    sim_running_ = true;
+
+    EngineLog::Log("Game entities initialized");
+}
+
+void Engine::SetWorldGravity(float gx, float gy) {
+    if (!world_) return;
+    static constexpr float P2M = 1.0f / 32.0f;
+    world_->GetB2World().SetGravity(b2Vec2(gx * P2M, gy * P2M));
+}
+
 void Engine::UnloadTerrain() {
     terrain_renderer_.reset();
     terrain_.reset();
@@ -492,8 +524,8 @@ void Engine::SimTick(double dt) {
 
     // Skip physics/simulation when paused
     if (sim_time_scale_ <= 0.0f) {
-        debug_ui_->Update(input_->GetMouseX(), input_->GetMouseY(),
-                          *cameras_[0], *terrain_, registry_, player);
+        if (debug_ui_) debug_ui_->Update(input_->GetMouseX(), input_->GetMouseY(),
+                                         *cameras_[0], *terrain_, registry_, player);
         return;
     }
 
@@ -533,8 +565,8 @@ void Engine::SimTick(double dt) {
 
     if (player) UpdateCameraFollow(*cameras_[0], *player);
 
-    debug_ui_->Update(input_->GetMouseX(), input_->GetMouseY(),
-                      *cameras_[0], *terrain_, registry_, player);
+    if (debug_ui_) debug_ui_->Update(input_->GetMouseX(), input_->GetMouseY(),
+                                     *cameras_[0], *terrain_, registry_, player);
 
     entity_manager_->ProcessQueues();
 }
@@ -559,7 +591,7 @@ void Engine::Render(double alpha) {
 
     if (sim_running_) {
         RenderEntities(r, alpha);
-        debug_ui_->Render(r);
+        if (debug_ui_) debug_ui_->Render(r);
     }
 
     ui_system_->Render();

@@ -1,0 +1,22 @@
+[material]
+id   = "FrozenCrust"
+name = "Frozen Crust"
+
+[physics]
+state    = "solid"
+density  = 110
+friction = 0.1
+hardness = 25
+
+[visual]
+color           = [160, 205, 230]
+color_variation = 20
+transparency    = 0.2
+
+[behavior]
+gravity          = false
+blast_resistance = 15
+
+[temperature]
+heat_conductivity = 0.35
+ambient_temp      = -100.0
