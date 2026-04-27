@@ -16,8 +16,8 @@ jobs:
         include:
           - os: ubuntu-24.04
             artifact: juliana-linux
-          - os: macos-14
-            artifact: juliana-macos
+          # - os: macos-14
+          #   artifact: juliana-macos
 
     steps:
       - uses: actions/checkout@v4
