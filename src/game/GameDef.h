@@ -15,9 +15,10 @@ struct GameDef {
     int window_height = 720;
 
     // [ui]
-    std::string skin_path;   // relative to base_path — path to skin.toml
-    std::string font_path;   // relative to base_path — path to .ttf (optional)
-    int         font_size = 14;
+    // Fonts are declared via @font-face in the package's RCSS. Skins are
+    // replaced by RCSS stylesheets referenced from RML documents. The only
+    // engine-side knob is the optional debugger overlay.
+    bool        ui_debugger = false;
 
     // [startup]
     std::string startup_script;  // relative to base_path — main Lua entry point

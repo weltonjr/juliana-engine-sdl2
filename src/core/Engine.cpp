@@ -36,12 +36,8 @@ void Engine::Init(const std::string& game_path) {
 
     // 4. UI system + log console
     ui_system_   = std::make_unique<UISystem>(window_->GetRenderer());
-    log_console_ = std::make_unique<LogConsole>(window_->GetRenderer());
-    if (!game_def_.skin_path.empty())
-        ui_system_->LoadSkin(game_def_.Resolve(game_def_.skin_path));
-    ui_system_->LoadFont(
-        game_def_.font_path.empty() ? "" : game_def_.Resolve(game_def_.font_path),
-        game_def_.font_size);
+    log_console_ = std::make_unique<LogConsole>();
+    // (Old skin/font loading removed: RmlUi handles styling via RCSS @font-face.)
 
     // Wire text input mode (SDL_StartTextInput/StopTextInput) to UI focus events
     ui_system_->SetTextInputCallback([this](bool on) {
@@ -63,13 +59,51 @@ void Engine::Init(const std::string& game_path) {
         EngineLog::Log(buf0);
     }
 
-    // 6. Lua state + startup script
+    // 6. Lua state — created BEFORE RmlUi so its lua_State exists for the
+    //    RmlUi Lua plugin Initialise call. Startup script runs LAST after the
+    //    UI backend is ready to LoadDocument.
     lua_state_ = std::make_unique<LuaState>(*this, *ui_system_);
+
+    // 7. RmlUi backend. Init order: Render/System/File interfaces → Rml::Initialise
+    //    → Rml::Lua::Initialise(L) → CreateContext. Done here so Lua scripts
+    //    started below already see the `rmlui` global.
+    {
+        // Detect HiDPI ratio from SDL renderer output vs. logical window size.
+        int logical_w = win_w, logical_h = win_h;
+        int output_w  = win_w, output_h  = win_h;
+        SDL_GL_GetDrawableSize(window_->GetWindow(), &output_w, &output_h);
+        float dpi_scale = (logical_w > 0) ? float(output_w) / float(logical_w) : 1.0f;
+
+        rml_ui_ = std::make_unique<RmlUiBackend>();
+        if (!rml_ui_->Init(window_->GetWindow(), window_->GetRenderer(),
+                           lua_state_->GetState(), output_w, output_h,
+                           dpi_scale, game_def_.ui_debugger)) {
+            EngineLog::Log("[Engine] RmlUi backend failed to initialise");
+        }
+        // Active package root resolves relative <link>/url() in RML/RCSS.
+        rml_ui_->PushPackageBase(game_path);
+
+        // RmlUi sees raw SDL events through the same pipeline as game input.
+        input_->GetRawMutable().AddEventListener([this](SDL_Event& ev) {
+            if (rml_ui_) rml_ui_->ProcessEvent(ev);
+            if (imgui_)  imgui_->ProcessEvent(ev);
+        });
+    }
+
+    // 7b. Dear ImGui — debug overlays only. Lives next to RmlUi but renders
+    //     AFTER it so dev tools sit above game UI.
+    imgui_ = std::make_unique<ImGuiBackend>();
+    if (!imgui_->Init(window_->GetWindow(), window_->GetRenderer())) {
+        EngineLog::Log("[Engine] ImGui backend failed to initialise");
+    }
+
+    // 8. Run startup script — last so the UI backend, registry, and Lua state
+    //    are all live by the time the package's main.lua runs.
     if (!game_def_.startup_script.empty()) {
         lua_state_->RunScript(game_def_.Resolve(game_def_.startup_script), game_path);
     }
 
-    // 7. Game loop (always last)
+    // 9. Game loop (always last)
     game_loop_ = std::make_unique<GameLoop>(60);
 
     char buf1[256];
@@ -138,7 +172,12 @@ void Engine::InitSimulation(const std::string& scenario_path) {
     cameras_[0]->SetPosition(cx, cy);
     cameras_[0]->ClampToBounds(terrain_->GetWidth(), terrain_->GetHeight());
 
-    debug_ui_ = std::make_unique<DebugUI>(window_->GetRenderer());
+    debug_ui_ = std::make_unique<DebugUI>();
+    if (imgui_) {
+        imgui_->AddRenderCallback([this]() {
+            if (debug_ui_ && debug_overlay_visible_) debug_ui_->DrawImGui();
+        });
+    }
     sim_running_ = true;
 
     char buf_sim[128];
@@ -591,13 +630,24 @@ void Engine::Render(double alpha) {
 
     if (sim_running_) {
         RenderEntities(r, alpha);
-        if (debug_ui_) debug_ui_->Render(r);
     }
+    // Note: DebugUI now renders via ImGui callback in the imgui_->BeginFrame
+    // pass below, gated by debug_overlay_visible_.
 
     ui_system_->Render();
 
-    if (log_console_visible_)
-        log_console_->Render(r);
+    // RmlUi update + render in the render path (per architectural correction:
+    // animations/event propagation key off real frame time, not sim time).
+    if (rml_ui_) rml_ui_->UpdateAndRender();
+
+    // Dear ImGui — debug overlays render last so they sit above everything else.
+    // BeginFrame fans out to all registered render-time callbacks (DebugUI,
+    // LogConsole, Lua engine.on_render hooks); EndFrame submits to the renderer.
+    if (imgui_) {
+        imgui_->BeginFrame();
+        if (log_console_visible_ && log_console_) log_console_->DrawImGui();
+        imgui_->EndFrame();
+    }
 
     SDL_RenderPresent(r);
 }

@@ -2,11 +2,19 @@
 
 #include <SDL2/SDL.h>
 #include <cstring>
+#include <functional>
 #include <string>
+#include <vector>
 
 class InputSystem {
 public:
     InputSystem();
+
+    // Listener fires for every polled SDL event before InputSystem aggregates it.
+    // Used by the RmlUi backend so the UI sees raw SDL input on the same path
+    // that real users / tests drive the engine through.
+    using EventListener = std::function<void(SDL_Event&)>;
+    void AddEventListener(EventListener cb) { event_listeners_.push_back(std::move(cb)); }
 
     void PollEvents();
 
@@ -45,4 +53,6 @@ private:
     int         scroll_y_ = 0;
     std::string text_input_;
     bool        text_input_active_ = false;
+
+    std::vector<EventListener> event_listeners_;
 };

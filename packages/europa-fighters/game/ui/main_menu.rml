@@ -1,0 +1,15 @@
+<rml>
+<head>
+    <title>Europa Fighters — Main Menu</title>
+    <link type="text/rcss" href="style.rcss"/>
+</head>
+<body class="menu-screen">
+    <div class="panel">
+        <h1>EUROPA FIGHTERS</h1>
+        <h2>ICE TUNNEL DEATHMATCH</h2>
+        <button id="btn-deathmatch">Deathmatch</button>
+        <button id="btn-options">Options</button>
+        <button id="btn-exit">Exit</button>
+    </div>
+</body>
+</rml>

@@ -28,7 +28,13 @@
       "Bash(cmake -S /Users/mainuser/source/juliana-engine-sdl2 -B /Users/mainuser/source/juliana-engine-sdl2/build)",
       "Bash(cmake --build /Users/mainuser/source/juliana-engine-sdl2/build)",
       "Bash(cmake --build build -j)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(cmake --build build --target juliana --parallel)",
+      "Bash(cmake -B build)",
+      "Bash(SDL_VIDEODRIVER=dummy timeout 3 ./build/juliana)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(curl -sL \"https://api.github.com/repos/ocornut/imgui/releases/latest\")"
     ]
   }
 }

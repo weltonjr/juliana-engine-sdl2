@@ -22,6 +22,8 @@
 #include "render/DebugUI.h"
 #include "game/GameDef.h"
 #include "ui/UISystem.h"
+#include "ui/RmlUiBackend.h"
+#include "ui/ImGuiBackend.h"
 #include "scripting/LuaState.h"
 #include "core/LogConsole.h"
 #include <functional>
@@ -118,6 +120,9 @@ public:
     }
 
     const DefinitionRegistry& GetRegistry() const { return registry_; }
+
+    RmlUiBackend* GetRmlUi() const { return rml_ui_.get(); }
+    ImGuiBackend* GetImGui() const { return imgui_.get(); }
 
     // Log console visibility (controlled from Lua)
     bool IsLogConsoleVisible() const { return log_console_visible_; }
@@ -223,6 +228,8 @@ private:
     std::unique_ptr<InputManager> input_;
     std::unique_ptr<LuaState>     lua_state_;
     std::unique_ptr<UISystem>     ui_system_;
+    std::unique_ptr<RmlUiBackend> rml_ui_;
+    std::unique_ptr<ImGuiBackend> imgui_;
 
     std::vector<std::unique_ptr<Camera>> cameras_;
 

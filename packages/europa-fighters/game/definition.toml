@@ -8,9 +8,7 @@ width  = 1280
 height = 720
 
 [ui]
-skin      = "ui/skin.toml"
-font      = "ui/Hack-Regular.ttf"
-font_size = 14
+debugger = false  # set true to enable RmlUi's inspector overlay
 
 [startup]
 script = "scripts/main.lua"

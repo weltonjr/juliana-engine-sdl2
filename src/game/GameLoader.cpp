@@ -33,9 +33,7 @@ GameDef GameLoader::Load(const std::string& game_dir) {
         def.window_width  = static_cast<int>(tbl["window"]["width"] .value_or(int64_t(1280)));
         def.window_height = static_cast<int>(tbl["window"]["height"].value_or(int64_t(720)));
 
-        def.skin_path = tbl["ui"]["skin"]     .value_or(std::string(""));
-        def.font_path = tbl["ui"]["font"]     .value_or(std::string(""));
-        def.font_size = static_cast<int>(tbl["ui"]["font_size"].value_or(int64_t(14)));
+        def.ui_debugger = tbl["ui"]["debugger"].value_or(false);
 
         def.startup_script = tbl["startup"]["script"].value_or(std::string(""));
 

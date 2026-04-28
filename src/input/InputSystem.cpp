@@ -16,6 +16,11 @@ void InputSystem::PollEvents() {
 
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+        // Fan event out to registered listeners (RmlUi, test harness, etc.)
+        // before InputSystem digests it. Listeners observe raw events but do
+        // not mutate the queue.
+        for (auto& cb : event_listeners_) cb(event);
+
         if (event.type == SDL_QUIT) {
             quit_ = true;
         }

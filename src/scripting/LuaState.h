@@ -6,6 +6,7 @@
 class Engine;
 class UISystem;
 class TerrainSimulator;
+struct lua_State;
 
 // Owns the sol2/Lua state and exposes the engine API to scripts.
 // All sol2 types are hidden behind the Impl pimpl to avoid polluting compile times.
@@ -26,6 +27,10 @@ public:
     // Load material behavior scripts from the registry and register on_tick callbacks
     // into the simulator. Call after all packages are loaded and LUTs are built.
     void LoadMaterialScripts(TerrainSimulator& sim);
+
+    // Raw lua_State* for plugins that need to bind onto the same state
+    // (e.g. the RmlUi Lua plugin that auto-registers the `rmlui` global).
+    lua_State* GetState() const;
 
 private:
     struct Impl;

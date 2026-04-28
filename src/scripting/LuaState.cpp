@@ -9,6 +9,8 @@
 #include "core/Engine.h"
 #include "core/EngineLog.h"
 #include "ui/UISystem.h"
+#include "ui/ImGuiBackend.h"
+#include "scripting/LuaImGuiBindings.h"
 #include "scenario/ScenarioDef.h"
 #include "scenario/ScenarioLoader.h"
 #include <nlohmann/json.hpp>
@@ -39,6 +41,8 @@ LuaState::LuaState(Engine& engine, UISystem& ui)
 }
 
 LuaState::~LuaState() = default;
+
+lua_State* LuaState::GetState() const { return impl_->lua.lua_state(); }
 
 // ─── Package path helper ──────────────────────────────────────────────────────
 
@@ -291,6 +295,28 @@ void LuaState::BindAPI() {
 
     // UI usertypes + engine.ui live in LuaUIBindings.cpp.
     RegisterLuaUIBindings(lua, ui, engine);
+
+    // ── Dear ImGui Lua bindings — debug overlays only ──────────────────────────
+    RegisterLuaImGuiBindings(lua);
+
+    // engine.on_render(fn) registers a callback fired between ImGui::NewFrame
+    // and ImGui::Render each frame, so Lua scripts can emit ImGui draw calls.
+    eng["on_render"] = [&engine](sol::function fn) {
+        ImGuiBackend* gui = engine.GetImGui();
+        if (!gui) return -1;
+        return gui->AddRenderCallback([fn]() mutable {
+            auto res = fn();
+            if (!res.valid()) {
+                sol::error err = res;
+                std::string msg = std::string("[Lua error in on_render] ") + err.what();
+                EngineLog::Log(msg);
+                std::fprintf(stderr, "%s\n", msg.c_str());
+            }
+        });
+    };
+    eng["clear_render_callback"] = [&engine](int id) {
+        if (auto* gui = engine.GetImGui()) gui->RemoveRenderCallback(id);
+    };
 
     // ── engine.terrain table ───────────────────────────────────────────────────
     auto ter_tbl = eng.create("terrain");

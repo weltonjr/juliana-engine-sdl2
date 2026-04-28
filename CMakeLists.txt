@@ -34,7 +34,29 @@ FetchContent_Declare(box2d
 set(BOX2D_BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BOX2D_BUILD_TESTBED    OFF CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(tomlplusplus json sol2 box2d)
+# RmlUi 6.2 — HTML/CSS-subset UI library with native Lua bindings.
+# We vendor our own SDL2 backend under src/ui/backend/, so samples are disabled.
+FetchContent_Declare(rmlui
+    GIT_REPOSITORY https://github.com/mikke89/RmlUi.git
+    GIT_TAG 6.2
+)
+
+set(RMLUI_SAMPLES         OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING         OFF CACHE BOOL "" FORCE)
+set(RMLUI_LUA_BINDINGS    ON  CACHE BOOL "" FORCE)
+set(RMLUI_FONT_ENGINE     "freetype" CACHE STRING "" FORCE)
+
+# Dear ImGui 1.92.7 — immediate-mode GUI used exclusively for engine debug
+# overlays (FPS, log console, entity inspector). Game UI uses RmlUi.
+# ImGui ships no CMakeLists, so we add its sources to the engine target below.
+# Lua bindings are a small hand-rolled surface in src/scripting/LuaImGuiBindings.cpp
+# (the public sol2_ImGui_Bindings library is unmaintained and stuck on ImGui ~1.85).
+FetchContent_Declare(imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.92.7
+)
+
+FetchContent_MakeAvailable(tomlplusplus json sol2 box2d rmlui imgui)
 
 # ─── Patch sol2 v3.3.0 ────────────────────────────────────────────────────────
 # optional<T&>::emplace incorrectly calls this->construct() which only exists
@@ -72,6 +94,8 @@ else()
     list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/lib/cmake/SDL2" "/opt/homebrew/lib/cmake/SDL2_ttf" "/opt/homebrew/lib/cmake/SDL2_image")
     # Lua 5.4 via Homebrew (brew install lua@5.4)
     list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/lua@5.4" "/opt/homebrew/opt/lua")
+    # FreeType for RmlUi (brew install freetype on macOS, libfreetype-dev on Linux)
+    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/freetype")
     # Windows/MSYS2 ucrt64
     list(APPEND CMAKE_PREFIX_PATH "C:/msys64/ucrt64")
 
@@ -87,13 +111,31 @@ endif()
 
 # ─── Engine executable ─────────────────────────────────────────────────────────
 file(GLOB_RECURSE SOURCES "src/*.cpp")
-add_executable(${PROJECT_NAME} ${SOURCES})
+
+# Dear ImGui sources (core + SDL2 platform + SDL_Renderer backend).
+# ImGui ships no CMake target; we compile its .cpp files directly into juliana.
+set(IMGUI_SOURCES
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer2.cpp
+)
+
+add_executable(${PROJECT_NAME} ${SOURCES} ${IMGUI_SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     src
     ${LUA_INCLUDE_DIR}
     ${sol2_SOURCE_DIR}/include
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
 )
+
+# Vendored RmlUi SDL backend files require this define to pick the SDL2 code path.
+target_compile_definitions(${PROJECT_NAME} PRIVATE RMLUI_SDL_VERSION_MAJOR=2)
 
 if(NOT EMSCRIPTEN)
     target_include_directories(${PROJECT_NAME} PRIVATE
@@ -109,6 +151,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     nlohmann_json::nlohmann_json
     ${LUA_LIBRARIES}
     box2d
+    RmlUi::RmlUi
 )
 
 if(EMSCRIPTEN)
@@ -120,6 +163,7 @@ if(EMSCRIPTEN)
         -sUSE_SDL=2
         -sUSE_SDL_TTF=2
         -sUSE_SDL_IMAGE=2
+        -sUSE_FREETYPE=1
         -sSDL2_IMAGE_FORMATS='["png"]'
         # Enable C++ exceptions so sol2 and toml++ work correctly.
         -fexceptions
@@ -129,6 +173,7 @@ if(EMSCRIPTEN)
         -sUSE_SDL=2
         -sUSE_SDL_TTF=2
         -sUSE_SDL_IMAGE=2
+        -sUSE_FREETYPE=1
         -sSDL2_IMAGE_FORMATS='["png"]'
         -sALLOW_MEMORY_GROWTH=1
         -sWASM=1

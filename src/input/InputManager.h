@@ -46,6 +46,7 @@ public:
 
     // Access the raw layer (for direct scancode queries if needed).
     const InputSystem& GetRaw() const { return *raw_; }
+    InputSystem&       GetRawMutable()  { return *raw_; }
 
 private:
     std::unique_ptr<InputSystem> raw_;
